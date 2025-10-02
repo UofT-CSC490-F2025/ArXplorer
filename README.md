@@ -128,7 +128,7 @@ search_queries(query_id, text, embeddings, filters, timestamp)
 
 ## Implementation Status
 
-### ✅ Completed Features
+### Completed Features
 
 1. Core data schemas and models
 2. arXiv API integration and parsing
@@ -139,7 +139,7 @@ search_queries(query_id, text, embeddings, filters, timestamp)
 7. Logging and error handling
 8. Batch processing framework
 
-### 🚧 Next Steps (Not Yet Implemented)
+### Next Steps (Not Yet Implemented)
 
 1. **Citation Analysis**:
    - Parse references from full-text PDFs
@@ -234,5 +234,3 @@ The pipeline generates:
 - **Semantic Embeddings**: 768-dimensional vectors (SciBERT)
 - **Search Index**: FAISS vector similarity index
 - **Analytics**: Dataset statistics and processing reports
-
-Perfect for building academic search systems with semantic understanding.

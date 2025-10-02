@@ -72,11 +72,9 @@ output_directory/
 
 ## Key Features
 
-- ✅ **Static Dataset Processing**: No complex scheduling
-- ✅ **Semantic Embeddings**: SciBERT for scientific text
-- ✅ **Vector Search**: FAISS indexing for similarity queries
-- ✅ **Batch Processing**: Memory-efficient large dataset handling
-- ✅ **Error Handling**: Robust processing with comprehensive logging
-- ✅ **Flexible Filtering**: By category, year, and paper count
-
-Perfect for CSC490 project requirements with clean, production-ready code.
+- **Static Dataset Processing**: No complex scheduling
+- **Semantic Embeddings**: SciBERT for scientific text
+- **Vector Search**: FAISS indexing for similarity queries
+- **Batch Processing**: Memory-efficient large dataset handling
+- **Error Handling**: Robust processing with comprehensive logging
+- **Flexible Filtering**: By category, year, and paper count

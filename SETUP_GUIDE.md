@@ -13,9 +13,9 @@ python --version
 ```
 
 ### 2. Operating System
-- **Windows**: ✅ Tested and working
-- **macOS**: ✅ Should work (all dependencies support macOS)
-- **Linux**: ✅ Should work (all dependencies support Linux)
+- **Windows**: Tested and working
+- **macOS**: Should work (all dependencies support macOS)
+- **Linux**: Should work (all dependencies support Linux)
 
 ## Installation Steps
 
@@ -100,7 +100,7 @@ import faiss
 import pandas as pd
 import nltk
 from schemas import ArXivPaper
-print('✅ All imports successful!')
+print('All imports successful!')
 print(f'PyTorch version: {torch.__version__}')
 print(f'CUDA available: {torch.cuda.is_available()}')
 "
@@ -191,11 +191,9 @@ python static_pipeline.py \
 
 ## Support
 
-If team members encounter issues:
+If you encounter issues:
 1. Check Python version compatibility
 2. Ensure virtual environment is activated
 3. Verify all dependencies installed correctly
 4. Test with smaller datasets first
 5. Check available RAM/storage space
-
-The pipeline is designed to be robust and should work on most modern systems with Python 3.8+!
