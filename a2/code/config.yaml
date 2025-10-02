@@ -1,0 +1,87 @@
+# ArXplorer Data Processing Pipeline Configuration
+
+# Data Sources
+arxiv:
+  api_url: "http://export.arxiv.org/api/query"
+  categories:
+    - "cs.AI"
+    - "cs.CL" 
+    - "cs.LG"
+    - "cs.IR"
+    - "stat.ML"
+    - "cs.CV"
+  rate_limit_delay: 1.0  # seconds between requests
+
+# Processing Settings
+processing:
+  batch_size: 100
+  max_workers: 4
+  retry_attempts: 3
+  timeout: 300  # seconds
+
+# Embedding Model Configuration
+embedding:
+  model_name: "allenai/scibert_scivocab_uncased"
+  model_version: "1.0"
+  embedding_dimension: 768
+  max_sequence_length: 512
+  device: "auto"  # auto, cpu, cuda
+
+# Storage Paths
+storage:
+  raw_data_path: "./data/raw"
+  processed_data_path: "./data/processed"
+  embeddings_path: "./data/embeddings"
+  index_path: "./data/index"
+  logs_path: "./logs"
+
+# Vector Search Configuration
+vector_search:
+  faiss_index_type: "IVF"  # IVF, Flat, HNSW
+  n_clusters: 1024
+  similarity_threshold: 0.7
+  top_k_results: 20
+
+# Database Configuration (for data warehouse)
+database:
+  type: "sqlite"  # sqlite, mysql, postgresql
+  connection_string: "sqlite:///arxplorer.db"
+  pool_size: 10
+  pool_timeout: 30
+
+# Pipeline Scheduling
+scheduling:
+  daily_update: 
+    enabled: true
+    time: "02:00"  # UTC time
+    categories: ["cs.AI", "cs.CL", "cs.LG"]
+    max_papers_per_run: 500
+  
+  weekly_full_refresh:
+    enabled: true
+    day: "sunday"
+    time: "01:00"
+    lookback_days: 7
+    max_papers_per_run: 2000
+
+# Text Processing
+text_processing:
+  language: "en"
+  remove_stopwords: true
+  min_keyword_length: 3
+  max_keywords: 15
+  enable_spell_check: false
+
+# Monitoring and Logging
+monitoring:
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  enable_metrics: true
+  metrics_port: 8080
+  health_check_port: 8081
+
+# Feature Flags
+features:
+  enable_citation_analysis: false  # Future feature
+  enable_full_text_processing: false  # Future feature
+  enable_author_disambiguation: false  # Future feature
+  enable_semantic_clustering: true
