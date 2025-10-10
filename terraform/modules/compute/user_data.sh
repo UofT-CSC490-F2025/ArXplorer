@@ -4,7 +4,7 @@ yum install -y python3 python3-pip git
 
 # Install your teammate's ArXplorer pipeline
 cd /home/ec2-user
-git clone https://github.com/yourusername/arxplorer.git
+git clone https://github.com/yourusername/arxplorer.git # Replace with actual repo URL later
 cd arxplorer
 
 # Install Python dependencies
