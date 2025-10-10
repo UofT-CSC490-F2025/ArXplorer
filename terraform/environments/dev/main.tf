@@ -12,13 +12,13 @@ module "networking" {
   availability_zones = var.availability_zones
 }
 
-# module "storage" {
-#   source = "../../modules/storage"
-#
-#   project_name  = var.project_name
-#   environment   = var.environment
-#   bucket_prefix = var.storage_bucket_prefix
-# }
+module "storage" {
+  source = "../../modules/storage"
+
+  project_name  = var.project_name
+  environment   = var.environment
+  bucket_prefix = var.storage_bucket_prefix
+}
 
 # module "database" {
 #   source = "../../modules/database"
