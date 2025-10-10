@@ -20,18 +20,18 @@ module "storage" {
   bucket_prefix = var.storage_bucket_prefix
 }
 
-# module "database" {
-#   source = "../../modules/database"
-#
-#   project_name = var.project_name
-#   environment  = var.environment
-#
-#   vpc_id             = module.networking.vpc_id
-#   private_subnet_ids = module.networking.private_subnet_ids
-#
-#   instance_class = var.db_instance_class
-#   database_name  = var.db_name
-# }
+module "database" {
+  source       = "../../modules/database"
+  project_name = var.project_name
+  environment  = var.environment
+
+  vpc_id                     = module.networking.vpc_id
+  private_subnet_ids         = module.networking.private_subnet_ids
+  database_security_group_id = module.networking.database_security_group_id
+
+  instance_class = var.db_instance_class
+  database_name  = var.db_name
+}
 
 module "compute" {
   source = "../../modules/compute"
@@ -44,7 +44,7 @@ module "compute" {
   private_subnet_ids    = module.networking.private_subnet_ids
   app_security_group_id = module.networking.app_security_group_id
   database_endpoint     = "placeholder"
-  storage_buckets       = {
+  storage_buckets = {
     raw_data  = "placeholder"
     processed = "placeholder"
   }
@@ -52,4 +52,21 @@ module "compute" {
   instance_type = var.instance_type
   min_size      = var.min_size
   max_size      = var.max_size
+}
+
+output "database_endpoint" {
+  description = "RDS endpoint for the database module"
+  value       = module.database.endpoint
+  sensitive   = true
+}
+
+output "database_secret_arn" {
+  description = "Secrets Manager ARN containing DB credentials"
+  value       = module.database.secret_arn
+  sensitive   = true
+}
+
+output "database_subnet_group_name" {
+  description = "Database subnet group name"
+  value       = module.database.db_subnet_group_name
 }
