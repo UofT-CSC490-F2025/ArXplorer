@@ -70,3 +70,8 @@ output "database_subnet_group_name" {
   description = "Database subnet group name"
   value       = module.database.db_subnet_group_name
 }
+
+output "storage_bucket_names" {
+  description = "S3 bucket names created by the storage module"
+  value       = module.storage.bucket_names
+}
