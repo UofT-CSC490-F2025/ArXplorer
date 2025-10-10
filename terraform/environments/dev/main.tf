@@ -71,7 +71,22 @@ output "database_subnet_group_name" {
   value       = module.database.db_subnet_group_name
 }
 
+output "database_security_group_id" {
+  description = "Security group used by the database"
+  value       = module.networking.database_security_group_id
+}
+
 output "storage_bucket_names" {
   description = "S3 bucket names created by the storage module"
   value       = module.storage.bucket_names
+}
+
+output "vpc_id" {
+  description = "VPC ID from networking module"
+  value       = module.networking.vpc_id
+}
+
+output "private_subnet_ids" {
+  description = "Private subnet IDs from networking module"
+  value       = module.networking.private_subnet_ids
 }
