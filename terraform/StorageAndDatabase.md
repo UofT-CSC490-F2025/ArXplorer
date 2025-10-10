@@ -1039,12 +1039,12 @@ module "database" {
 
 You'll know you're successful when:
 
-- [ ] **Storage Module**: 4 S3 buckets created with encryption and versioning
+- [v] **Storage Module**: 4 S3 buckets created with encryption and versioning
 - [ ] **Database Module**: RDS MySQL instance running in private subnets
-- [ ] **Security**: All resources encrypted, no public access
-- [ ] **Integration**: Your outputs available for teammate's compute module
+- [v] **Security**: All resources encrypted, no public access
+- [v] **Integration**: Your outputs available for teammate's compute module
 - [ ] **Testing**: Can upload files to S3 and connect to database
-- [ ] **Coordination**: Teammate can reference your resources in their modules
+- [v] **Coordination**: Teammate can reference your resources in their modules
 
 ## Troubleshooting Guide
 

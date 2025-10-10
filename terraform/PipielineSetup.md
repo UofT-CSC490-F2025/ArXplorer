@@ -3,11 +3,11 @@
 ## Quick Start Checklist
 
 ### Prerequisites (Must Complete First)
-- [ ] AWS account created and configured
-- [ ] AWS CLI installed and configured (`aws configure`)
-- [ ] Terraform installed and working (`terraform --version`)
-- [ ] Copy the entire `terraform/` folder from your teammate
-- [ ] Verify you can run `aws sts get-caller-identity` successfully
+- [v] AWS account created and configured
+- [v] AWS CLI installed and configured (`aws configure`)
+- [v] Terraform installed and working (`terraform --version`)
+- [v] Copy the entire `terraform/` folder from your teammate
+- [v] Verify you can run `aws sts get-caller-identity` successfully
 
 ### Your Responsibility Overview
 You are building the **networking foundation** and **compute infrastructure** that will run the ArXplorer pipeline. Your teammate handles storage and database.
@@ -712,9 +712,9 @@ terraform show aws_vpc.main
 ## Success Criteria
 
 You'll know you're done when:
-- [ ] `terraform plan` shows no errors
-- [ ] VPC and subnets are created successfully
-- [ ] Security groups allow proper traffic flow
+- [v] `terraform plan` shows no errors
+- [v] VPC and subnets are created successfully
+- [v] Security groups allow proper traffic flow
 - [ ] Load balancer is accessible from internet
 - [ ] EC2 instances can connect to your teammate's database
 - [ ] Pipeline can read/write to your teammate's S3 buckets
