@@ -1,54 +1,57 @@
-# Development Environment Main Configuration
+# ArXplorer Development Environment
+# CSC490 - Infrastructure as Code Implementation
+
 terraform {
   required_version = ">= 1.0"
 }
 
-# Use the root module configurations
-module "networking" {
-  source = "../../modules/networking"
-  
-  project_name = var.project_name
-  environment  = var.environment
-}
+# ===== ACTIVE MODULES =====
 
+# Storage Module - S3 buckets for ArXplorer data pipeline
 module "storage" {
   source = "../../modules/storage"
   
-  project_name = var.project_name
-  environment  = var.environment
+  project_name  = var.project_name
+  environment   = var.environment
   bucket_prefix = var.storage_bucket_prefix
 }
 
-module "database" {
-  source = "../../modules/database"
-  
-  project_name = var.project_name
-  environment  = var.environment
-  
-  # Dependencies from networking module
-  vpc_id              = module.networking.vpc_id
-  private_subnet_ids  = module.networking.private_subnet_ids
-  
-  # Database configuration
-  instance_class = var.db_instance_class
-  database_name  = var.db_name
+# ===== FUTURE MODULES =====
+
+# TODO: Uncomment when networking module is ready
+# module "networking" {
+#   source = "../../modules/networking"
+#   project_name = var.project_name
+#   environment  = var.environment
+# }
+
+# TODO: Uncomment when database module is ready
+# module "database" {
+#   source = "../../modules/database"
+#   
+#   project_name = var.project_name
+#   environment  = var.environment
+# }
+
+# TODO: Uncomment when compute module is ready  
+# module "compute" {
+#   source = "../../modules/compute"
+#   project_name = var.project_name
+#   environment  = var.environment
+# }
+
+# ===== OUTPUTS =====
+output "storage_buckets" {
+  description = "S3 bucket information for ArXplorer data storage"
+  value       = module.storage.bucket_names
 }
 
-module "compute" {
-  source = "../../modules/compute"
-  
-  project_name = var.project_name
-  environment  = var.environment
-  
-  # Dependencies from other modules
-  vpc_id              = module.networking.vpc_id
-  public_subnet_ids   = module.networking.public_subnet_ids
-  private_subnet_ids  = module.networking.private_subnet_ids
-  database_endpoint   = module.database.endpoint
-  storage_buckets     = module.storage.bucket_names
-  
-  # Compute configuration
-  instance_type = var.instance_type
-  min_size     = var.min_size
-  max_size     = var.max_size
+output "storage_arns" {
+  description = "S3 bucket ARNs for IAM policies"
+  value       = module.storage.bucket_arns
+}
+
+output "storage_summary" {
+  description = "Summary of storage configuration"
+  value       = module.storage.storage_summary
 }

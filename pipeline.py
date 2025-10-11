@@ -363,17 +363,20 @@ class VectorIndexer:
             dimension = vectors.shape[1]
             
             # Create FAISS index
-            if self.config.faiss_index_type == "IVF":
+            # For small datasets, use Flat index; for large datasets, use IVF
+            if self.config.faiss_index_type == "IVF" and len(embeddings) >= self.config.n_clusters:
                 # IVF (Inverted File) index for large datasets
                 quantizer = faiss.IndexFlatIP(dimension)  # Inner product for cosine similarity
                 self.index = faiss.IndexIVFFlat(quantizer, dimension, self.config.n_clusters)
                 
                 # Train the index
                 self.index.train(vectors)
+                self.logger.info(f"Using IVF index with {self.config.n_clusters} clusters")
                 
             else:
                 # Flat index for smaller datasets
                 self.index = faiss.IndexFlatIP(dimension)
+                self.logger.info(f"Using Flat index for {len(embeddings)} embeddings")
             
             # Add vectors to index
             self.index.add(vectors)
