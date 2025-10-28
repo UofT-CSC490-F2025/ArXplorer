@@ -3,7 +3,7 @@
 ## 📁 **Final Directory Structure**
 
 ```
-turtleneck/
+ArXplorer/
 ├── 🔧 Core Pipeline Components
 │   ├── enhanced_pipeline.py      # Main cloud pipeline ⭐
 │   ├── pipeline.py               # Core pipeline classes
