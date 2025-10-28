@@ -66,6 +66,5 @@ Thumbs.db
 # Large dataset files (should be in S3)
 *.csv
 *.json
-/data/
+data/
 datasets/
-# Note: src/data/ contains source code and should be committed
