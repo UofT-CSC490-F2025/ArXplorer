@@ -1,57 +1,92 @@
-# ArXplorer Development Environment
-# CSC490 - Infrastructure as Code Implementation
-
+# Development Environment Main Configuration
 terraform {
   required_version = ">= 1.0"
 }
 
-# ===== ACTIVE MODULES =====
+module "networking" {
+  source = "../../modules/networking"
 
-# Storage Module - S3 buckets for ArXplorer data pipeline
+  project_name       = var.project_name
+  environment        = var.environment
+  vpc_cidr           = var.vpc_cidr
+  availability_zones = var.availability_zones
+}
+
 module "storage" {
   source = "../../modules/storage"
-  
+
   project_name  = var.project_name
   environment   = var.environment
   bucket_prefix = var.storage_bucket_prefix
 }
 
-# ===== FUTURE MODULES =====
+module "database" {
+  source       = "../../modules/database"
+  project_name = var.project_name
+  environment  = var.environment
 
-# TODO: Uncomment when networking module is ready
-# module "networking" {
-#   source = "../../modules/networking"
-#   project_name = var.project_name
-#   environment  = var.environment
-# }
+  vpc_id                     = module.networking.vpc_id
+  private_subnet_ids         = module.networking.private_subnet_ids
+  database_security_group_id = module.networking.database_security_group_id
 
-# TODO: Uncomment when database module is ready
-# module "database" {
-#   source = "../../modules/database"
-#   
-#   project_name = var.project_name
-#   environment  = var.environment
-# }
+  instance_class = var.db_instance_class
+  database_name  = var.db_name
+}
 
-# TODO: Uncomment when compute module is ready  
-# module "compute" {
-#   source = "../../modules/compute"
-#   project_name = var.project_name
-#   environment  = var.environment
-# }
+module "compute" {
+  source = "../../modules/compute"
 
-# ===== OUTPUTS =====
-output "storage_buckets" {
-  description = "S3 bucket information for ArXplorer data storage"
+  project_name = var.project_name
+  environment  = var.environment
+
+  vpc_id                = module.networking.vpc_id
+  public_subnet_ids     = module.networking.public_subnet_ids
+  private_subnet_ids    = module.networking.private_subnet_ids
+  app_security_group_id = module.networking.app_security_group_id
+  database_endpoint     = "placeholder"
+  storage_buckets = {
+    raw_data  = "placeholder"
+    processed = "placeholder"
+  }
+
+  instance_type = var.instance_type
+  min_size      = var.min_size
+  max_size      = var.max_size
+}
+
+output "database_endpoint" {
+  description = "RDS endpoint for the database module"
+  value       = module.database.endpoint
+  sensitive   = true
+}
+
+output "database_secret_arn" {
+  description = "Secrets Manager ARN containing DB credentials"
+  value       = module.database.secret_arn
+  sensitive   = true
+}
+
+output "database_subnet_group_name" {
+  description = "Database subnet group name"
+  value       = module.database.db_subnet_group_name
+}
+
+output "database_security_group_id" {
+  description = "Security group used by the database"
+  value       = module.networking.database_security_group_id
+}
+
+output "storage_bucket_names" {
+  description = "S3 bucket names created by the storage module"
   value       = module.storage.bucket_names
 }
 
-output "storage_arns" {
-  description = "S3 bucket ARNs for IAM policies"
-  value       = module.storage.bucket_arns
+output "vpc_id" {
+  description = "VPC ID from networking module"
+  value       = module.networking.vpc_id
 }
 
-output "storage_summary" {
-  description = "Summary of storage configuration"
-  value       = module.storage.storage_summary
+output "private_subnet_ids" {
+  description = "Private subnet IDs from networking module"
+  value       = module.networking.private_subnet_ids
 }

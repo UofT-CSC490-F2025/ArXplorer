@@ -67,11 +67,11 @@ Follow the detailed guide in `TEAMMATE_SETUP_GUIDE.md`
 ### 8. Success Criteria
 
 You'll know your networking/compute work is done when:
-- [ ] VPC and subnets created successfully
+- [v] VPC and subnets created successfully
 - [ ] Security groups allow proper traffic flow  
 - [ ] Load balancer accessible from internet
 - [ ] EC2 instances can connect to teammate's database
-- [ ] `terraform plan` shows no errors for your modules
+- [v] `terraform plan` shows no errors for your modules
 
 ## Quick Reference
 
