@@ -199,7 +199,7 @@ def main():
     
     phase1_success = demo.run_phase(
         "Phase 1 - Pre-Disaster Backup",
-        "disaster_recovery/01_pre_disaster_backup.py",
+        "infrastructure/disaster_recovery/01_pre_disaster_backup.py",
         "Creating comprehensive backup of all systems before disaster simulation"
     )
     
@@ -215,7 +215,7 @@ def main():
     
     phase2_success = demo.run_phase(
         "Phase 2 - Disaster Simulation",
-        "disaster_recovery/02_disaster_simulation.py",
+        "infrastructure/disaster_recovery/02_disaster_simulation.py",
         "Systematically destroying all infrastructure, data, and configuration"
     )
     
@@ -231,7 +231,7 @@ def main():
     
     phase3_success = demo.run_phase(
         "Phase 3 - Disaster Recovery", 
-        "disaster_recovery/03_disaster_recovery.py",
+        "infrastructure/disaster_recovery/03_disaster_recovery.py",
         "Restoring all systems from backup with full verification"
     )
     

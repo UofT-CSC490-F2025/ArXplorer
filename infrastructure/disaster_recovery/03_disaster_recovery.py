@@ -28,7 +28,7 @@ class DisasterRecovery:
         if not os.path.exists(self.backup_dir):
             raise ValueError(f"Backup directory not found: {self.backup_dir}")
         
-        print(f"🔄 Using backup from: {backup_timestamp}")
+        print(f"Using backup from: {backup_timestamp}")
     
     def find_latest_backup(self):
         """Find the most recent backup timestamp"""
@@ -44,7 +44,7 @@ class DisasterRecovery:
     
     def restore_configuration(self):
         """Restore application configuration from backup"""
-        print("🔧 RESTORING Application Configuration...")
+        print("RESTORING Application Configuration...")
         
         try:
             # Restore config files
@@ -54,28 +54,28 @@ class DisasterRecovery:
                 backup_file = f"{self.backup_dir}/{config_file}"
                 if os.path.exists(backup_file):
                     shutil.copy2(backup_file, config_file)
-                    print(f"   ✅ Restored {config_file}")
+                    print(f"   SUCCESS: Restored {config_file}")
                 else:
-                    print(f"   ⚠️  Backup not found for {config_file}")
+                    print(f"   WARNING: Backup not found for {config_file}")
             
             # Load restored configuration
             with open('config.yaml', 'r') as f:
                 self.config = yaml.safe_load(f)
             
-            print("   ✅ Configuration restoration complete")
+            print("   SUCCESS: Configuration restoration complete")
             return True
             
         except Exception as e:
-            print(f"   ❌ Error restoring configuration: {e}")
+            print(f"   ERROR: Error restoring configuration: {e}")
             return False
     
     def restore_terraform_infrastructure(self):
         """Restore AWS S3 infrastructure using Terraform"""
-        print("🏗️  RESTORING AWS S3 Infrastructure...")
+        print("RESTORING AWS S3 Infrastructure...")
         
         try:
             # Restore Terraform state files
-            tf_dir = "terraform/environments/dev"
+            tf_dir = "infrastructure/terraform/environments/dev"
             tf_backup_dir = f"{self.backup_dir}/terraform"
             
             if os.path.exists(tf_backup_dir):
@@ -84,7 +84,7 @@ class DisasterRecovery:
                     backup_file = f"{tf_backup_dir}/{state_file}"
                     if os.path.exists(backup_file):
                         shutil.copy2(backup_file, f"{tf_dir}/{state_file}")
-                        print(f"   ✅ Restored {state_file}")
+                        print(f"   SUCCESS: Restored {state_file}")
             
             # Change to terraform directory
             os.chdir(tf_dir)

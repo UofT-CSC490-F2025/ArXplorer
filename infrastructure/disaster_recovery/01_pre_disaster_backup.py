@@ -26,7 +26,7 @@ class PreDisasterBackup:
     
     def backup_aws_s3_state(self):
         """Document current S3 bucket state and contents"""
-        print("🔍 Backing up AWS S3 state...")
+        print("Backing up AWS S3 state...")
         
         s3_client = boto3.client('s3', region_name=self.config['aws']['region'])
         backup_data = {
@@ -65,10 +65,10 @@ class PreDisasterBackup:
                     'policy': policy
                 }
                 
-                print(f"   ✅ {bucket_name}: {len(objects)} objects, {sum(obj['size'] for obj in objects):,} bytes")
+                print(f"   SUCCESS: {bucket_name}: {len(objects)} objects, {sum(obj['size'] for obj in objects):,} bytes")
                 
             except Exception as e:
-                print(f"   ❌ Error backing up {bucket_name}: {e}")
+                print(f"   ERROR: Error backing up {bucket_name}: {e}")
                 backup_data['buckets'][bucket_name] = {'error': str(e)}
         
         # Save S3 backup manifest
@@ -79,7 +79,7 @@ class PreDisasterBackup:
     
     def backup_mongodb_state(self):
         """Create backup of MongoDB collections and metadata"""
-        print("🔍 Backing up MongoDB Atlas state...")
+        print("Backing up MongoDB Atlas state...")
         
         try:
             client = MongoClient(self.config['mongodb']['connection_string'])
@@ -113,7 +113,7 @@ class PreDisasterBackup:
                     'sample_documents': sample_docs
                 }
                 
-                print(f"   ✅ {collection_name}: {stats.get('count', 0)} documents, {stats.get('size', 0):,} bytes")
+                print(f"   SUCCESS: {collection_name}: {stats.get('count', 0)} documents, {stats.get('size', 0):,} bytes")
             
             # Save MongoDB backup manifest
             with open(f"{self.backup_dir}/mongodb_state_backup.json", 'w') as f:
@@ -123,12 +123,12 @@ class PreDisasterBackup:
             return backup_data
             
         except Exception as e:
-            print(f"   ❌ Error backing up MongoDB: {e}")
+            print(f"   ERROR: Error backing up MongoDB: {e}")
             return {'error': str(e)}
     
     def backup_terraform_state(self):
         """Backup current Terraform state"""
-        print("🔍 Backing up Terraform state...")
+        print("Backing up Terraform state...")
         
         try:
             # Copy terraform state files
@@ -138,29 +138,29 @@ class PreDisasterBackup:
             tf_backup_dir = f"{self.backup_dir}/terraform"
             os.makedirs(tf_backup_dir, exist_ok=True)
             
-            # Copy state files
-            for file in ['terraform.tfstate', 'terraform.tfstate.backup', '.terraform.lock.hcl']:
+            # Copy key files
+            for file in ['terraform.tfstate', 'terraform.tfstate.backup', 'terraform.tfvars']:
                 src_path = f"{tf_dir}/{file}"
                 if os.path.exists(src_path):
                     shutil.copy2(src_path, f"{tf_backup_dir}/{file}")
-                    print(f"   ✅ Backed up {file}")
+                    print(f"   SUCCESS: Backed up {file}")
             
             # Copy configuration files
             for file in ['main.tf', 'variables.tf']:
                 src_path = f"{tf_dir}/{file}"
                 if os.path.exists(src_path):
                     shutil.copy2(src_path, f"{tf_backup_dir}/{file}")
-                    print(f"   ✅ Backed up {file}")
+                    print(f"   SUCCESS: Backed up {file}")
             
             return True
             
         except Exception as e:
-            print(f"   ❌ Error backing up Terraform: {e}")
+            print(f"   ERROR: Error backing up Terraform: {e}")
             return False
     
     def backup_application_config(self):
         """Backup application configuration files"""
-        print("🔍 Backing up application configuration...")
+        print("Backing up application configuration...")
         
         try:
             import shutil
@@ -174,17 +174,17 @@ class PreDisasterBackup:
             for file in config_files:
                 if os.path.exists(file):
                     shutil.copy2(file, f"{self.backup_dir}/{file}")
-                    print(f"   ✅ Backed up {file}")
+                    print(f"   SUCCESS: Backed up {file}")
             
             return True
             
         except Exception as e:
-            print(f"   ❌ Error backing up config: {e}")
+            print(f"   ERROR: Error backing up config: {e}")
             return False
     
     def create_recovery_manifest(self, s3_backup, mongodb_backup):
         """Create comprehensive recovery manifest"""
-        print("📋 Creating recovery manifest...")
+        print("Creating recovery manifest...")
         
         manifest = {
             'disaster_recovery': {
@@ -224,12 +224,12 @@ class PreDisasterBackup:
         with open(f"{self.backup_dir}/recovery_manifest.json", 'w') as f:
             json.dump(manifest, f, indent=2)
         
-        print(f"✅ Recovery manifest created: {self.backup_dir}/recovery_manifest.json")
+        print(f"SUCCESS: Recovery manifest created: {self.backup_dir}/recovery_manifest.json")
         return manifest
 
 def main():
     """Execute pre-disaster backup"""
-    print("🚨 ArXplorer Disaster Recovery - Pre-Disaster Backup")
+    print("ArXplorer Disaster Recovery - Pre-Disaster Backup")
     print("=" * 60)
     
     backup = PreDisasterBackup()
@@ -243,9 +243,9 @@ def main():
     # Create recovery manifest
     manifest = backup.create_recovery_manifest(s3_backup, mongodb_backup)
     
-    print("\n✅ Pre-disaster backup completed!")
-    print(f"📁 Backup location: {backup.backup_dir}")
-    print("🎬 Ready to begin disaster simulation...")
+    print("\nSUCCESS: Pre-disaster backup completed!")
+    print(f"Backup location: {backup.backup_dir}")
+    print("Ready to begin disaster simulation...")
 
 if __name__ == "__main__":
     main()
