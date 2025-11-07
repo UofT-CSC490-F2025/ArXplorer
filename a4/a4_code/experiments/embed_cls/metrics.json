@@ -1,0 +1,28 @@
+{
+  "model": "sentence-transformers/all-MiniLM-L6-v2",
+  "device": "cuda",
+  "val": {
+    "threshold": 0.6624802947044373,
+    "precision": 1.0,
+    "recall": 0.75,
+    "f1": 0.8571428571428571,
+    "accuracy": 0.8652849740932642,
+    "tp": 156,
+    "fp": 0,
+    "fn": 52,
+    "pos": 208,
+    "pred_pos": 156
+  },
+  "test": {
+    "threshold": 0.6624802947044373,
+    "precision": 0.9620253164556962,
+    "recall": 0.5428571428571428,
+    "f1": 0.6940639269406392,
+    "accuracy": 0.8069164265129684,
+    "tp": 76,
+    "fp": 3,
+    "fn": 64,
+    "pos": 140,
+    "pred_pos": 79
+  }
+}

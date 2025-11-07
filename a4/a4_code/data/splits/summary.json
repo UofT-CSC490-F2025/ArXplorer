@@ -1,0 +1,19 @@
+{
+  "total_rows": 1616,
+  "dropped_duplicates": 0,
+  "n_queries": 96,
+  "splits": {
+    "train": {
+      "rows": 883,
+      "queries": 57
+    },
+    "test": {
+      "rows": 347,
+      "queries": 19
+    },
+    "val": {
+      "rows": 386,
+      "queries": 20
+    }
+  }
+}
