@@ -1,0 +1,138 @@
+# ArXplorer Configuration Template with MongoDB Atlas
+# Copy this to config.yaml and update with your Atlas connection details
+
+# Data Sources
+arxiv:
+  api_url: "http://export.arxiv.org/api/query"
+  categories:
+    - "cs.AI"
+    - "cs.CL" 
+    - "cs.LG"
+    - "cs.IR"
+    - "stat.ML"
+    - "cs.CV"
+  rate_limit_delay: 1.0
+
+# Processing Settings
+processing:
+  batch_size: 100
+  max_workers: 4
+  retry_attempts: 3
+  timeout: 300
+
+# Embedding Model Configuration
+embedding:
+  model_name: "allenai/scibert_scivocab_uncased"
+  model_version: "1.0"
+  embedding_dimension: 768
+  max_sequence_length: 512
+  device: "auto"
+
+# Storage Configuration
+storage:
+  mode: "cloud"  # local or cloud
+
+# AWS S3 Configuration (keep your existing settings)
+aws:
+  region: "ca-central-1"
+  buckets:
+    raw_data: "arxplorer-dev-dev-raw-data-k9j69o8v"
+    processed: "arxplorer-dev-dev-processed-k9j69o8v"
+    embeddings: "arxplorer-dev-dev-embeddings-k9j69o8v"
+    backups: "arxplorer-dev-dev-backups-k9j69o8v"
+
+# Vector Search Configuration
+vector_search:
+  faiss_index_type: "IVF"
+  n_clusters: 1024
+  similarity_threshold: 0.7
+  top_k_results: 20
+
+# Database Configuration (legacy SQLite - can keep for backup)
+database:
+  type: "sqlite"
+  connection_string: "sqlite:///arxplorer.db"
+  pool_size: 10
+  pool_timeout: 30
+
+# ============================================================================
+# MONGODB ATLAS CONFIGURATION
+# ============================================================================
+
+# Production MongoDB Atlas Configuration
+mongodb:
+  enabled: true
+  # Your Atlas connection string with actual password
+  connection_string: "mongodb+srv://arxplorer_db_user:E14bupBhNORll6QT@arxplorercluster.sv4wks6.mongodb.net/arxplorer?retryWrites=true&w=majority&appName=ArXplorerCluster"
+  database_name: "arxplorer"
+  use_async: true
+  collections:
+    raw_papers: "raw_papers"
+    processed_papers: "processed_papers"
+    embeddings: "embeddings"
+    search_queries: "search_queries"
+    pipeline_runs: "pipeline_runs"
+    user_feedback: "user_feedback"
+
+# Alternative: Environment-specific configurations
+# Uncomment and use one of these for different environments:
+
+# Development Environment
+# mongodb:
+#   enabled: true
+#   connection_string: "mongodb+srv://arxplorer_user:YOUR_PASSWORD_HERE@cluster0.xxxxx.mongodb.net/arxplorer_dev?retryWrites=true&w=majority"
+#   database_name: "arxplorer_dev"
+#   use_async: true
+
+# Staging Environment  
+# mongodb:
+#   enabled: true
+#   connection_string: "mongodb+srv://arxplorer_user:YOUR_PASSWORD_HERE@cluster0.xxxxx.mongodb.net/arxplorer_staging?retryWrites=true&w=majority"
+#   database_name: "arxplorer_staging"
+#   use_async: true
+
+# Team Shared Development
+# mongodb:
+#   enabled: true
+#   connection_string: "mongodb+srv://arxplorer_user:YOUR_PASSWORD_HERE@cluster0.xxxxx.mongodb.net/arxplorer_team?retryWrites=true&w=majority"
+#   database_name: "arxplorer_team"
+#   use_async: true
+
+# ============================================================================
+
+# Pipeline Scheduling
+scheduling:
+  daily_update: 
+    enabled: true
+    time: "02:00"
+    categories: ["cs.AI", "cs.CL", "cs.LG"]
+    max_papers_per_run: 500
+  
+  weekly_full_refresh:
+    enabled: true
+    day: "sunday"
+    time: "01:00"
+    lookback_days: 7
+    max_papers_per_run: 2000
+
+# Text Processing
+text_processing:
+  language: "en"
+  remove_stopwords: true
+  min_keyword_length: 3
+  max_keywords: 15
+  enable_spell_check: false
+
+# Monitoring and Logging
+monitoring:
+  log_level: "INFO"
+  enable_metrics: true
+  metrics_port: 8080
+  health_check_port: 8081
+
+# Feature Flags
+features:
+  enable_citation_analysis: false
+  enable_full_text_processing: false
+  enable_author_disambiguation: false
+  enable_semantic_clustering: true
