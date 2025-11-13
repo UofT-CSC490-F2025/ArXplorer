@@ -1,0 +1,31 @@
+# Core training stack
+transformers
+datasets
+trl
+peft
+accelerate
+
+# Quantization for QLoRA
+bitsandbytes
+
+# Metrics, logging, utils
+scikit-learn
+pandas
+numpy
+tensorboard
+
+# Torch (install per platform; if this fails, install via PyTorch instructions)
+torch
+# Minimal requirements for Part 3 baselines (GPU recommended)\n# Note: For CUDA-enabled PyTorch on Windows, install the appropriate build per https://pytorch.org/get-started/locally/
+# The generic 'torch' wheel may default to CPU unless installed with a CUDA-specific extra.
+
+torch
+sentence-transformers
+scikit-learn
+numpy
+scipy
+pandas
+joblib
+requests
+rank-bm25
+tqdm
