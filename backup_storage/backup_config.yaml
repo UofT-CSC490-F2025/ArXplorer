@@ -1,0 +1,47 @@
+# ArXplorer Automated Backup Configuration
+# Production backup scheduling and retention settings
+
+backup_schedule:
+  # Critical backups during high-activity periods
+  critical_interval: 15  # minutes
+  
+  # Regular backups during normal operations  
+  hourly_backup: true
+  
+  # Full system backups
+  daily_backup:
+    enabled: true
+    time: "02:00"  # 2 AM daily
+  
+  # Long-term archival
+  weekly_backup:
+    enabled: true
+    day: "sunday"
+    time: "01:00"  # 1 AM Sunday
+
+retention:
+  # How long to keep different backup types
+  critical_retention_hours: 48
+  hourly_retention_days: 7
+  daily_retention_days: 30
+  weekly_retention_months: 12
+
+monitoring:
+  # Alert if backup hasn't run in this time
+  max_backup_age_minutes: 20
+  
+  # Success rate threshold for alerts
+  min_success_rate_percent: 95
+  
+  # Log rotation
+  max_log_size_mb: 100
+  keep_log_files: 10
+
+storage:
+  # Local backup storage limits
+  max_backup_size_gb: 50
+  cleanup_when_full: true
+  
+  # Remote backup integration (future)
+  s3_backup_bucket: "arxplorer-disaster-recovery-backups"
+  enable_remote_backup: false
