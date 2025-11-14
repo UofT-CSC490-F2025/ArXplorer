@@ -28,7 +28,7 @@ from nltk.tokenize import word_tokenize
 import re
 
 # Local imports
-from schemas import (
+from src.core.schemas import (
     ArXivPaper, ProcessedPaper, PaperEmbedding, Author, 
     PaperStatus, PipelineConfig, DATABASE_SCHEMAS
 )
