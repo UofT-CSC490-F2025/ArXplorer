@@ -1,8 +1,8 @@
 # ArXplorer Load Testing & Vulnerability Analysis (A5 Part 2)
 
-**Author**: [Your Name]
-**Course**: CSC490 - Capstone Design Project
-**Date**: November 14, 2025
+ArXplorer 
+CSC490
+November 14, 2025
 
 ---
 
@@ -93,7 +93,7 @@ Our testing identified multiple attack vectors that could be exploited for denia
 
 This section documents our systematic approach to identifying and resolving performance bottlenecks.
 
-**Video Recording Link**: [Insert your video link here]
+**Video Recording Link**: https://drive.google.com/file/d/1NEWp_57KxVQ3kz8J4VAWGq6AMT17TE2S/view?usp=sharing
 
 ### 4.1 The Break: Demonstrating System Failure Under Load
 
