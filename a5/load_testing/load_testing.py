@@ -316,7 +316,7 @@ class CPUBombUser(HttpUser):
 @events.test_start.add_listener
 def on_test_start(environment, **kwargs):
     """Log test start"""
-    print(f"\n🚀 LOAD TESTING STARTED: {datetime.now()}")
+    print(f"\nLOAD TESTING STARTED: {datetime.now()}")
     print(f"Target host: {environment.host}")
     print("=" * 60)
 
@@ -324,7 +324,7 @@ def on_test_start(environment, **kwargs):
 @events.test_stop.add_listener  
 def on_test_stop(environment, **kwargs):
     """Log test completion and results"""
-    print(f"\n🏁 LOAD TESTING COMPLETED: {datetime.now()}")
+    print(f"\nLOAD TESTING COMPLETED: {datetime.now()}")
     print("=" * 60)
     
     # Print summary statistics
@@ -336,7 +336,7 @@ def on_test_stop(environment, **kwargs):
     
     # Print failures if any
     if stats.total.num_failures > 0:
-        print(f"\n💥 FAILURES DETECTED:")
+        print(f"\nFAILURES DETECTED:")
         for name, error in stats.errors.items():
             print(f"   {name}: {error.occurrences} occurrences")
 

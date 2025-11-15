@@ -153,9 +153,9 @@ class AttackScenario:
         print(f"Peak Memory: {self.results['peak_memory']:.1f}% ({self.results['peak_memory_gb']:.2f} GB)")
         
         if 'exception' in self.results:
-            print(f"💥 BROKE THE SYSTEM: {self.results['exception']}")
+            print(f"BROKE THE SYSTEM: {self.results['exception']}")
         else:
-            print("✅ System survived the attack")
+            print("System survived the attack")
 
 
 class EmbeddingBombAttack(AttackScenario):
@@ -424,7 +424,7 @@ class IndexBuildingBombAttack(AttackScenario):
 def run_all_attacks():
     """Run all attack scenarios systematically"""
     
-    print("🔥 ARXPLORER BREAKING POINT ANALYSIS")
+    print("ARXPLORER BREAKING POINT ANALYSIS")
     print("Assignment A5 Part 2 - Red Team vs Blue Team")
     print("=" * 60)
     
@@ -443,27 +443,27 @@ def run_all_attacks():
             all_results[attack.name] = result
             
             # Cool-down period between attacks
-            print("\n😴 Cool-down period (5 seconds)...")
+            print("\nCool-down period (5 seconds)...")
             time.sleep(5)
             
         except KeyboardInterrupt:
-            print("\n⏹️  Attack sequence interrupted by user")
+            print("\nAttack sequence interrupted by user")
             break
         except Exception as e:
-            print(f"\n💥 Attack failed: {e}")
+            print(f"\nAttack failed: {e}")
             all_results[attack.name] = {'exception': str(e)}
     
     # Generate final report
     print("\n" + "=" * 60)
-    print("🏁 FINAL BREAKING POINT ANALYSIS")
+    print("FINAL BREAKING POINT ANALYSIS")
     print("=" * 60)
     
     for name, results in all_results.items():
-        print(f"\n📊 {name}:")
+        print(f"\n{name}:")
         if 'exception' in results:
-            print(f"   💥 BROKE THE SYSTEM: {results['exception']}")
+            print(f"   BROKE THE SYSTEM: {results['exception']}")
         else:
-            print(f"   ✅ System survived")
+            print(f"   System survived")
             if 'peak_cpu' in results:
                 print(f"   Peak CPU: {results['peak_cpu']:.1f}%")
                 print(f"   Peak Memory: {results['peak_memory']:.1f}%")
@@ -475,14 +475,14 @@ def run_all_attacks():
     with open(results_file, 'w') as f:
         json.dump(all_results, f, indent=2, default=str)
     
-    print(f"\n📄 Results saved to: {results_file}")
+    print(f"\nResults saved to: {results_file}")
     
     return all_results
 
 
 if __name__ == "__main__":
     # Check system capabilities first
-    print("🖥️  SYSTEM INFORMATION:")
+    print("SYSTEM INFORMATION:")
     print(f"   CPU cores: {psutil.cpu_count()}")
     print(f"   Memory: {psutil.virtual_memory().total / (1024**3):.2f} GB")
     print(f"   Available: {psutil.virtual_memory().available / (1024**3):.2f} GB")
