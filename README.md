@@ -1,6 +1,6 @@
-# Retrieval System - Dense, Sparse, and Hybrid Search
+# Retrieval System - Dense, Sparse, and Hybrid Search with Query Rewriting
 
-A modular retrieval system supporting dense (SPECTER), sparse (SPLADE), and hybrid search with Reciprocal Rank Fusion.
+A modular retrieval system supporting dense (SPECTER), sparse (SPLADE), and hybrid search with Reciprocal Rank Fusion. Includes LLM-based query rewriting with Qwen for improved retrieval robustness.
 
 ## Quick Start
 
@@ -50,6 +50,9 @@ python scripts/encode.py --method sparse --data-file data/arxiv_1k.jsonl
 # Hybrid search with reranking (default: enabled)
 python scripts/query.py --method hybrid
 
+# Hybrid search with query rewriting (generates multiple query variants)
+python scripts/query.py --method hybrid --rewrite-query
+
 # Hybrid search without reranking
 python scripts/query.py --method hybrid --no-rerank
 
@@ -74,11 +77,13 @@ src/
     ├── encoders/    # Dense (SPECTER) and Sparse (SPLADE) encoders
     ├── indexers/    # FAISS and scipy sparse indexers
     ├── searchers/   # Dense, sparse, and hybrid (RRF) searchers
-    └── rerankers/   # Cross-encoder reranking for result refinement
+    ├── rerankers/   # Cross-encoder reranking for result refinement
+    └── query_rewriting/  # LLM-based query rewriting (Qwen)
 
 scripts/
 ├── encode.py        # Unified encoding CLI
-└── query.py         # Unified query CLI
+├── query.py         # Unified query CLI with multi-query fusion
+└── create_arxiv_dataset.py  # Extract papers from Kaggle dataset
 
 data/
 ├── dense_index/     # FAISS index + embeddings + doc_map
@@ -109,6 +114,12 @@ reranker:
   model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
   rerank_top_k: 100  # Number of candidates to rerank
   batch_size: 32
+
+query_rewriting:
+  enabled: false     # Enable LLM-based query rewriting (requires --rewrite-query flag)
+  model: "Qwen/Qwen2.5-3B-Instruct"  # Instruction-tuned causal LM
+  num_rewrites: 2    # Number of query variants to generate
+  device: "cuda"     # Use GPU for fast inference
 ```
 
 CLI arguments override config values:
@@ -120,10 +131,18 @@ python scripts/query.py --method hybrid --top-k 20 --retrieval-k 200
 
 ## Key Features
 
+### LLM-Based Query Rewriting
+- **Model**: Qwen/Qwen3-4B-Instruct (instruction-tuned causal LM)
+- **Multi-query generation**: Creates N diverse query variants (configurable via `num_rewrites`)
+- **Multi-query fusion**: Combines results from original + rewritten queries using RRF
+- **Robustness**: Improves recall by capturing alternative phrasings and terminology
+- **Use case**: Especially effective for finding canonical papers with varied citation styles
+
 ### Three-Stage Retrieval Pipeline
-1. **First-stage retrieval**: Dense (SPECTER) + Sparse (SPLADE) with configurable retrieval_k (default 100)
-2. **Fusion**: Reciprocal Rank Fusion (RRF) to combine rankings
-3. **Reranking**: Cross-encoder (ms-marco-MiniLM) for precise relevance scoring on top candidates
+1. **Query rewriting (optional)**: Generate diverse query variants with Qwen LLM
+2. **First-stage retrieval**: Dense (SPECTER) + Sparse (SPLADE) with configurable retrieval_k (default 100)
+3. **Fusion**: Reciprocal Rank Fusion (RRF) to combine rankings (multi-query if rewriting enabled)
+4. **Reranking**: Cross-encoder (ms-marco-MiniLM) for precise relevance scoring on top candidates
 
 ### Hybrid Search with RRF
 - Combines dense semantic search (SPECTER) with sparse lexical search (SPLADE)
@@ -169,8 +188,29 @@ python scripts/query.py --method hybrid --top-k 20 --retrieval-k 200
 - Hybrid (RRF only): ~200-400ms
 - Hybrid + Reranking (100 candidates): ~400-700ms
   - Cross-encoder adds ~200-300ms for batch scoring
+- Hybrid + Query Rewriting (2 rewrites): ~600-900ms
+  - Qwen inference adds ~200-400ms (FP16, GPU)
+  - Multi-query retrieval adds ~100-200ms
 
 ## Advanced Usage
+
+### Query Rewriting Options
+
+```powershell
+# Enable query rewriting with default settings (2 rewrites)
+python scripts/query.py --method hybrid --rewrite-query
+
+# Generate more query variants for better coverage
+python scripts/query.py --method hybrid --rewrite-query --num-rewrites 4
+
+# Query rewriting with reranking disabled (faster)
+python scripts/query.py --method hybrid --rewrite-query --no-rerank
+
+# Single-query mode with rewriting
+python scripts/query.py --method hybrid --rewrite-query \
+  --query "attention mechanism for transformers" \
+  --top-k 10
+```
 
 ### Custom Config File
 
@@ -265,3 +305,4 @@ Required fields (configurable via `config.yaml`):
 - **SPLADE**: [Formal et al., 2021](https://arxiv.org/abs/2107.05720)
 - **RRF**: Cormack et al., 2009 - "Reciprocal Rank Fusion"
 - **MS MARCO Cross-Encoders**: [Bajaj et al., 2018](https://arxiv.org/abs/1611.09268)
+- **Qwen 3** [Qwen Team, 2025](https://arxiv.org/abs/2505.09388) 
