@@ -16,7 +16,8 @@ class DenseEncoder(BaseEncoder):
         device: str = None,
         normalize: bool = True,
         use_specter2: bool = False,
-        specter2_adapter: str = "allenai/specter2"
+        specter2_base_adapter: str = "allenai/specter2",
+        specter2_query_adapter: str = "allenai/specter2_adhoc_query"
     ):
         """
         Args:
@@ -24,19 +25,23 @@ class DenseEncoder(BaseEncoder):
             device: Device to use ('cuda', 'cpu', or None for auto)
             normalize: Whether to L2-normalize embeddings
             use_specter2: If True, use SPECTER2 with adapters library
-            specter2_adapter: Adapter name for SPECTER2 (e.g., 'allenai/specter2' for proximity/retrieval)
+            specter2_base_adapter: Adapter for document embeddings (e.g., 'allenai/specter2')
+            specter2_query_adapter: Adapter for query embeddings (e.g., 'allenai/specter2_adhoc_query')
         """
         self._model_name = model_name
         self.normalize = normalize
         self.use_specter2 = use_specter2
+        self.specter2_base_adapter = specter2_base_adapter
+        self.specter2_query_adapter = specter2_query_adapter
+        self.current_adapter = None
         
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = device
         
         if use_specter2:
-            print(f"Loading SPECTER2 with adapter: {specter2_adapter} on {device}")
-            self._load_specter2(specter2_adapter)
+            print(f"Loading SPECTER2 with base adapter: {specter2_base_adapter} on {device}")
+            self._load_specter2(specter2_base_adapter)
         else:
             print(f"Loading dense encoder: {model_name} on {device}")
             self._load_sentence_transformer(model_name)
@@ -61,28 +66,31 @@ class DenseEncoder(BaseEncoder):
                 "  pip install transformers==4.38.2 adapters"
             )
         
-        # Load base model and tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2_base')
-        self.model = AutoAdapterModel.from_pretrained('allenai/specter2_base')
+        # Load base model and tokenizer (only on first call)
+        if not hasattr(self, 'tokenizer'):
+            self.tokenizer = AutoTokenizer.from_pretrained('allenai/specter2_base')
+            self.model = AutoAdapterModel.from_pretrained('allenai/specter2_base')
+            self.model.to(self.device)
+            self.model.eval()
+            self._dimension = 768
+            self.loaded_adapters = {}
         
-        # Load and activate the proximity adapter for retrieval
-        adapter_name_loaded = self.model.load_adapter(adapter_name, source="hf", set_active=True)
-        print(f"✓ Loaded adapter: {adapter_name_loaded}")
+        # Load adapter if not already loaded
+        if adapter_name not in self.loaded_adapters:
+            adapter_name_loaded = self.model.load_adapter(adapter_name, source="hf", set_active=False)
+            self.loaded_adapters[adapter_name] = adapter_name_loaded
+            print(f"✓ Loaded adapter: {adapter_name_loaded}")
+            # Move adapter parameters to the correct device
+            self.model.to(self.device)
         
-        # Move to device and set to eval mode
-        self.model.to(self.device)
-        self.model.eval()
-        
-        # Explicitly set active adapters after moving to device
-        self.model.set_active_adapters(adapter_name_loaded)
+        # Activate the adapter
+        self.model.set_active_adapters(self.loaded_adapters[adapter_name])
+        self.current_adapter = adapter_name
         
         # Verify adapter is active
         active = self.model.active_adapters
-        print(f"✓ Active adapters: {active}")
+        print(f"✓ Active adapter: {active}")
         print("Note: Any 'adapters available but none activated' warning is a false positive.")
-        
-        # SPECTER2 base is BERT-based with 768 dimensions
-        self._dimension = 768
     
     def encode(self, texts: Union[str, List[str]], batch_size: int = 16) -> np.ndarray:
         """Encode texts into dense vectors."""
@@ -143,6 +151,35 @@ class DenseEncoder(BaseEncoder):
             all_embeddings.append(embeddings)
         
         return np.vstack(all_embeddings).astype(np.float32)
+    
+    def set_adapter(self, adapter_name: str):
+        """Switch to a different SPECTER2 adapter (e.g., for query vs document encoding)."""
+        if not self.use_specter2:
+            print("Warning: set_adapter called but use_specter2=False")
+            return
+        
+        if adapter_name == self.current_adapter:
+            return  # Already using this adapter
+        
+        # Load and activate the adapter
+        if adapter_name not in self.loaded_adapters:
+            adapter_name_loaded = self.model.load_adapter(adapter_name, source="hf", set_active=False)
+            self.loaded_adapters[adapter_name] = adapter_name_loaded
+            print(f"✓ Loaded adapter: {adapter_name_loaded}")
+            # Ensure adapter parameters are on the correct device
+            self.model.to(self.device)
+        
+        self.model.set_active_adapters(self.loaded_adapters[adapter_name])
+        self.current_adapter = adapter_name
+        print(f"✓ Switched to adapter: {adapter_name}")
+    
+    def use_query_adapter(self):
+        """Switch to query adapter for encoding queries."""
+        self.set_adapter(self.specter2_query_adapter)
+    
+    def use_base_adapter(self):
+        """Switch to base adapter for encoding documents."""
+        self.set_adapter(self.specter2_base_adapter)
     
     def get_dimension(self) -> int:
         """Return embedding dimension."""
