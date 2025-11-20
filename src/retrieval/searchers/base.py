@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 
 @dataclass
@@ -11,6 +11,9 @@ class SearchResult:
     doc_id: str
     score: float
     rank: int = 0
+    dense_score: Optional[float] = None
+    sparse_score: Optional[float] = None
+    cross_encoder_score: Optional[float] = None
 
 
 class BaseSearcher(ABC):

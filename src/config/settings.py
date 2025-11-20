@@ -15,7 +15,8 @@ class EncoderConfig:
     normalize_dense: bool = True
     device: Optional[str] = None  # None = auto-detect
     use_specter2: bool = False
-    specter2_adapter: str = "allenai/specter2"
+    specter2_base_adapter: str = "allenai/specter2"  # For document embeddings
+    specter2_query_adapter: str = "allenai/specter2_adhoc_query"  # For query embeddings
 
 
 @dataclass
@@ -46,6 +47,12 @@ class SearchConfig:
     top_k: int = 10
     retrieval_k: int = 100  # For hybrid: retrieve this many from each before fusion
     rrf_k: int = 60  # RRF constant
+    # Weighted fusion settings
+    fusion_method: str = "weighted"  # "rrf" or "weighted"
+    dense_weight: float = 0.2
+    sparse_weight: float = 0.2
+    cross_encoder_weight: float = 0.6
+    normalize_scores: bool = True  # Min-max normalize component scores
 
 
 @dataclass

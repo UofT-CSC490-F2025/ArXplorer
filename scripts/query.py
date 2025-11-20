@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.config import Config
 from src.retrieval.encoders import DenseEncoder, SparseEncoder
 from src.retrieval.indexers import DenseIndexer, SparseIndexer
-from src.retrieval.searchers import DenseSearcher, SparseSearcher, HybridSearcher, SearchResult
+from src.retrieval.searchers import DenseSearcher, SparseSearcher, HybridSearcher, WeightedHybridSearcher, SearchResult
 from src.retrieval.query_rewriting import LLMQueryRewriter
 from src.retrieval.rerankers import CrossEncoderReranker
 
@@ -133,8 +133,13 @@ def setup_dense_searcher(config: Config) -> DenseSearcher:
         device=config.encoder.device,
         normalize=config.encoder.normalize_dense,
         use_specter2=config.encoder.use_specter2,
-        specter2_adapter=config.encoder.specter2_adapter
+        specter2_base_adapter=config.encoder.specter2_base_adapter,
+        specter2_query_adapter=config.encoder.specter2_query_adapter
     )
+    
+    # Switch to query adapter for searching (documents were encoded with base adapter)
+    if encoder.use_specter2:
+        encoder.use_query_adapter()
     
     indexer = DenseIndexer(
         encoder=encoder,
@@ -221,7 +226,7 @@ def multi_query_rrf_fusion(result_lists: List[List[SearchResult]], top_k: int, r
     return fused_results
 
 
-def print_results(results, method: str, reranked: bool = False):
+def print_results(results, method: str, reranked: bool = False, show_components: bool = False):
     """Print search results in a formatted way."""
     print(f"\n{'='*60}")
     print(f"{method.upper()} SEARCH RESULTS")
@@ -232,7 +237,22 @@ def print_results(results, method: str, reranked: bool = False):
         return
     
     for result in results:
-        print(f"Rank {result.rank:2d} | Score: {result.score:8.4f} | Doc ID: {result.doc_id}")
+        base_str = f"Rank {result.rank:2d} | Score: {result.score:8.4f} | Doc ID: {result.doc_id}"
+        
+        # Show component scores if available
+        if show_components and any([result.dense_score is not None, result.sparse_score is not None, result.cross_encoder_score is not None]):
+            components = []
+            if result.dense_score is not None:
+                components.append(f"Dense: {result.dense_score:.4f}")
+            if result.sparse_score is not None:
+                components.append(f"Sparse: {result.sparse_score:.4f}")
+            if result.cross_encoder_score is not None:
+                components.append(f"Cross: {result.cross_encoder_score:.4f}")
+            
+            if components:
+                base_str += f"\n         [{', '.join(components)}]"
+        
+        print(base_str)
     
     print(f"{'='*60}\n")
 
@@ -281,38 +301,53 @@ def interactive_mode(searcher, method: str, config: Config, reranker=None, query
                 print(f"All rewrites identical to original, using single query...")
         
         # Search with all queries
-        all_results = []
         retrieval_k = config.reranker.rerank_top_k if reranker else config.search.top_k
         
-        for query_text in queries_to_search:
-            if method == "hybrid":
-                results = searcher.search(
-                    query_text,
-                    top_k=retrieval_k,
-                    retrieval_k=config.search.retrieval_k
-                )
-            else:
-                results = searcher.search(
-                    query_text,
-                    top_k=retrieval_k
-                )
-            all_results.append(results)
-        
-        # Fuse results if multiple queries
-        if len(all_results) > 1:
-            results = multi_query_rrf_fusion(
-                all_results,
+        # Check if using weighted fusion with query rewriting
+        if method == "hybrid" and isinstance(searcher, WeightedHybridSearcher) and len(queries_to_search) > 1:
+            # Weighted fusion with multi-query aggregation
+            results = searcher.search_multi_query(
+                queries_to_search,
                 top_k=retrieval_k,
-                rrf_k=config.search.rrf_k
+                retrieval_k=config.search.retrieval_k
             )
         else:
-            results = all_results[0]
+            # Standard path: retrieve for each query and fuse
+            all_results = []
+            for query_text in queries_to_search:
+                if method == "hybrid":
+                    results = searcher.search(
+                        query_text,
+                        top_k=retrieval_k,
+                        retrieval_k=config.search.retrieval_k
+                    )
+                else:
+                    results = searcher.search(
+                        query_text,
+                        top_k=retrieval_k
+                    )
+                all_results.append(results)
+            
+            # Fuse results if multiple queries
+            if len(all_results) > 1:
+                results = multi_query_rrf_fusion(
+                    all_results,
+                    top_k=retrieval_k,
+                    rrf_k=config.search.rrf_k
+                )
+            else:
+                results = all_results[0]
         
         # Rerank if enabled
         if reranker and results:
             results = reranker.rerank(original_query, results, top_k=config.search.top_k)
+            
+            # Apply weighted fusion if using WeightedHybridSearcher
+            if isinstance(searcher, WeightedHybridSearcher):
+                results = searcher.apply_weighted_fusion(results, normalize=config.search.normalize_scores)
         
-        print_results(results, method, reranked=(reranker is not None))
+        show_components = isinstance(searcher, WeightedHybridSearcher)
+        print_results(results, method, reranked=(reranker is not None), show_components=show_components)
 
 
 def single_query_mode(searcher, query: str, method: str, config: Config, reranker=None, query_rewriter=None):
@@ -346,38 +381,53 @@ def single_query_mode(searcher, query: str, method: str, config: Config, reranke
             print(f"All rewrites identical to original, using single query...\n")
     
     # Search with all queries
-    all_results = []
     retrieval_k = config.reranker.rerank_top_k if reranker else config.search.top_k
     
-    for query_text in queries_to_search:
-        if method == "hybrid":
-            results = searcher.search(
-                query_text,
-                top_k=retrieval_k,
-                retrieval_k=config.search.retrieval_k
-            )
-        else:
-            results = searcher.search(
-                query_text,
-                top_k=retrieval_k
-            )
-        all_results.append(results)
-    
-    # Fuse results if multiple queries
-    if len(all_results) > 1:
-        results = multi_query_rrf_fusion(
-            all_results,
+    # Check if using weighted fusion with query rewriting
+    if method == "hybrid" and isinstance(searcher, WeightedHybridSearcher) and len(queries_to_search) > 1:
+        # Weighted fusion with multi-query aggregation
+        results = searcher.search_multi_query(
+            queries_to_search,
             top_k=retrieval_k,
-            rrf_k=config.search.rrf_k
+            retrieval_k=config.search.retrieval_k
         )
     else:
-        results = all_results[0]
+        # Standard path: retrieve for each query and fuse
+        all_results = []
+        for query_text in queries_to_search:
+            if method == "hybrid":
+                results = searcher.search(
+                    query_text,
+                    top_k=retrieval_k,
+                    retrieval_k=config.search.retrieval_k
+                )
+            else:
+                results = searcher.search(
+                    query_text,
+                    top_k=retrieval_k
+                )
+            all_results.append(results)
+        
+        # Fuse results if multiple queries
+        if len(all_results) > 1:
+            results = multi_query_rrf_fusion(
+                all_results,
+                top_k=retrieval_k,
+                rrf_k=config.search.rrf_k
+            )
+        else:
+            results = all_results[0]
     
     # Rerank if enabled
     if reranker and results:
         results = reranker.rerank(original_query, results, top_k=config.search.top_k)
+        
+        # Apply weighted fusion if using WeightedHybridSearcher
+        if isinstance(searcher, WeightedHybridSearcher):
+            results = searcher.apply_weighted_fusion(results, normalize=config.search.normalize_scores)
     
-    print_results(results, method, reranked=(reranker is not None))
+    show_components = isinstance(searcher, WeightedHybridSearcher)
+    print_results(results, method, reranked=(reranker is not None), show_components=show_components)
 
 
 def main():
@@ -432,8 +482,13 @@ def main():
             device=config.encoder.device,
             normalize=config.encoder.normalize_dense,
             use_specter2=config.encoder.use_specter2,
-            specter2_adapter=config.encoder.specter2_adapter
+            specter2_base_adapter=config.encoder.specter2_base_adapter,
+            specter2_query_adapter=config.encoder.specter2_query_adapter
         )
+        
+        # Switch to query adapter for searching
+        if encoder.use_specter2:
+            encoder.use_query_adapter()
         indexer_for_reranker = DenseIndexer(
             encoder=encoder,
             output_dir=config.index.dense_output_dir
@@ -460,8 +515,13 @@ def main():
             device=config.encoder.device,
             normalize=config.encoder.normalize_dense,
             use_specter2=config.encoder.use_specter2,
-            specter2_adapter=config.encoder.specter2_adapter
+            specter2_base_adapter=config.encoder.specter2_base_adapter,
+            specter2_query_adapter=config.encoder.specter2_query_adapter
         )
+        
+        # Switch to query adapter for searching
+        if dense_encoder.use_specter2:
+            dense_encoder.use_query_adapter()
         dense_indexer = DenseIndexer(
             encoder=dense_encoder,
             output_dir=config.index.dense_output_dir
@@ -481,11 +541,26 @@ def main():
         sparse_indexer.load()
         sparse_searcher = SparseSearcher(indexer=sparse_indexer, encoder=sparse_encoder)
         
-        searcher = HybridSearcher(
-            dense_searcher=dense_searcher,
-            sparse_searcher=sparse_searcher,
-            rrf_k=config.search.rrf_k
-        )
+        # Choose searcher based on fusion method
+        if config.search.fusion_method == "weighted":
+            searcher = WeightedHybridSearcher(
+                dense_searcher=dense_searcher,
+                sparse_searcher=sparse_searcher,
+                rrf_k=config.search.rrf_k,
+                dense_weight=config.search.dense_weight,
+                sparse_weight=config.search.sparse_weight,
+                cross_encoder_weight=config.search.cross_encoder_weight,
+                normalize_scores=config.search.normalize_scores
+            )
+            print(f"Using weighted fusion: dense={config.search.dense_weight:.2f}, sparse={config.search.sparse_weight:.2f}, cross={config.search.cross_encoder_weight:.2f}")
+        else:
+            searcher = HybridSearcher(
+                dense_searcher=dense_searcher,
+                sparse_searcher=sparse_searcher,
+                rrf_k=config.search.rrf_k
+            )
+            print("Using standard RRF fusion")
+        
         # Use dense indexer's doc_map for reranker (both should have same docs)
         indexer_for_reranker = dense_indexer
     

@@ -128,7 +128,8 @@ def encode_dense(config: Config, loader: StreamingJSONLLoader):
         device=config.encoder.device,
         normalize=config.encoder.normalize_dense,
         use_specter2=config.encoder.use_specter2,
-        specter2_adapter=config.encoder.specter2_adapter
+        specter2_base_adapter=config.encoder.specter2_base_adapter,
+        specter2_query_adapter=config.encoder.specter2_query_adapter
     )
     
     # Create indexer

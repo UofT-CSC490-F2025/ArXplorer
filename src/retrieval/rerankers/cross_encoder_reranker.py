@@ -48,13 +48,16 @@ class CrossEncoderReranker(BaseReranker):
         """
         Rerank results using cross-encoder.
         
+        Preserves dense_score and sparse_score from original results,
+        and populates cross_encoder_score.
+        
         Args:
             query: Query text
             results: Initial search results to rerank
             top_k: Number of top results to return after reranking
             
         Returns:
-            List of reranked SearchResult objects with updated scores and ranks
+            List of reranked SearchResult objects with cross_encoder_score populated
         """
         if not results:
             return []
@@ -84,13 +87,16 @@ class CrossEncoderReranker(BaseReranker):
             convert_to_numpy=True
         )
         
-        # Create new SearchResult objects with cross-encoder scores
+        # Update results with cross-encoder scores (preserve component scores)
         reranked_results = []
         for idx, (result, score) in enumerate(zip(valid_results, scores)):
             reranked_results.append(SearchResult(
                 doc_id=result.doc_id,
-                score=float(score),
-                rank=0  # Will be set after sorting
+                score=float(score),  # Temporarily set to cross-encoder score
+                rank=0,  # Will be set after sorting
+                dense_score=result.dense_score,  # Preserve
+                sparse_score=result.sparse_score,  # Preserve
+                cross_encoder_score=float(score)  # Populate
             ))
         
         # Sort by cross-encoder score (descending)
