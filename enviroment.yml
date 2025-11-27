@@ -32,3 +32,4 @@ dependencies:
       - huggingface_hub
       - tokenizers
       - pyserini
+      - pymilvus>=2.4.0

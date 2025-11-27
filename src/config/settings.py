@@ -35,10 +35,23 @@ class IndexConfig:
 class RerankerConfig:
     """Configuration for reranking."""
     enabled: bool = True
+    type: str = "cross-encoder"  # 'cross-encoder', 'qwen', or 'jina'
     model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     rerank_top_k: int = 100  # Number of candidates to rerank
     max_length: int = 512
     batch_size: int = 32
+    citation_boost_weight: float = 0.1  # Weight for citation boost (0 = disabled)
+    instruction: Optional[str] = None  # Custom instruction for reranker (Qwen/Jina only)
+
+
+@dataclass
+class CitationConfig:
+    """Configuration for citation metadata."""
+    enabled: bool = False  # Enable citation scoring
+    data_file: str = "data/citations.json"  # Citation data lookup
+    score_formula: str = "log"  # 'log' or 'log10'
+    normalize: bool = True  # Normalize to [0, 1]
+    missing_default: float = 0.0  # Default for papers without citations
 
 
 @dataclass
@@ -47,23 +60,20 @@ class SearchConfig:
     top_k: int = 10
     retrieval_k: int = 100  # For hybrid: retrieve this many from each before fusion
     rrf_k: int = 60  # RRF constant
-    # Weighted fusion settings
-    fusion_method: str = "weighted"  # "rrf" or "weighted"
-    dense_weight: float = 0.2
-    sparse_weight: float = 0.2
-    cross_encoder_weight: float = 0.6
-    normalize_scores: bool = True  # Min-max normalize component scores
 
 
 @dataclass
 class QueryRewritingConfig:
-    """Configuration for LLM-based query rewriting."""
+    """Configuration for LLM-based query rewriting and filter extraction."""
     enabled: bool = False
     model: str = "google/flan-t5-base"
     max_length: int = 128
     temperature: float = 0.3
     num_rewrites: int = 1  # Number of query rewrites to generate (1-5 recommended)
     device: Optional[str] = None  # None = auto-detect
+    filter_confidence_threshold: float = 0.7  # Minimum confidence to apply filters (0-1)
+    enable_citation_filters: bool = False  # Enable citation_count filters (requires citation data)
+    enable_year_filters: bool = True  # Enable year filters
 
 
 @dataclass
@@ -77,7 +87,25 @@ class DataConfig:
     use_metadata: bool = False
     categories_key: Optional[str] = "categories"
     authors_key: Optional[str] = "authors"
-    metadata_template: str = "Title: {title}\n\nAuthors: {authors}\n\nCategories: {categories}\n\nAbstract: {abstract}"
+    year_key: Optional[str] = "published_date"  # Field for year/date extraction
+    metadata_template: str = "Title: {title}\n\nAuthors: {authors}\n\nYear: {year}\n\nCategories: {categories}\n\nAbstract: {abstract}"
+
+
+@dataclass
+class MilvusConfig:
+    """Configuration for Milvus vector database."""
+    host: str = "localhost"
+    port: int = 19530
+    collection_name: str = "arxplorer_papers"
+    # Index parameters
+    dense_index_type: str = "IVF_FLAT"  # IVF_FLAT, HNSW, or FLAT
+    dense_nlist: int = 1024  # Number of clusters for IVF
+    dense_nprobe: int = 64  # Number of clusters to search
+    sparse_index_type: str = "SPARSE_INVERTED_INDEX"
+    # Connection settings
+    connection_timeout: int = 30
+    # Batch insert settings
+    batch_size: int = 1000  # Insert documents in batches
 
 
 @dataclass
@@ -87,8 +115,10 @@ class Config:
     index: IndexConfig = field(default_factory=IndexConfig)
     search: SearchConfig = field(default_factory=SearchConfig)
     reranker: RerankerConfig = field(default_factory=RerankerConfig)
+    citation: CitationConfig = field(default_factory=CitationConfig)
     query_rewriting: QueryRewritingConfig = field(default_factory=QueryRewritingConfig)
     data: DataConfig = field(default_factory=DataConfig)
+    milvus: MilvusConfig = field(default_factory=MilvusConfig)
     
     @classmethod
     def from_yaml(cls, filepath: str) -> 'Config':
@@ -108,8 +138,10 @@ class Config:
             index=IndexConfig(**data.get('index', {})),
             search=SearchConfig(**data.get('search', {})),
             reranker=RerankerConfig(**data.get('reranker', {})),
+            citation=CitationConfig(**data.get('citation', {})),
             query_rewriting=QueryRewritingConfig(**data.get('query_rewriting', {})),
-            data=DataConfig(**data.get('data', {}))
+            data=DataConfig(**data.get('data', {})),
+            milvus=MilvusConfig(**data.get('milvus', {}))
         )
     
     @classmethod

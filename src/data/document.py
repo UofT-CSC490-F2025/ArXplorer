@@ -12,6 +12,7 @@ class Document:
     text: str
     title: Optional[str] = None
     metadata: Optional[dict] = None
+    published_year: Optional[int] = None  # Publication year extracted from dataset
     
     def __post_init__(self):
         if not self.id:

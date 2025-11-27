@@ -1,7 +1,6 @@
-"""Indexers for building dense and sparse indexes."""
+"""Indexers for building Milvus hybrid indexes."""
 
 from .base import BaseIndexer
-from .faiss_indexer import DenseIndexer
-from .sparse_indexer import SparseIndexer
+from .milvus_indexer import MilvusIndexer
 
-__all__ = ["BaseIndexer", "DenseIndexer", "SparseIndexer"]
+__all__ = ["BaseIndexer", "MilvusIndexer"]
