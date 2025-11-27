@@ -1,26 +1,22 @@
-"""Unified query script for dense, sparse, and hybrid search.
+"""Query script for Milvus hybrid search with reranking and weighted fusion.
 
 Usage:
-    # Dense search only
-    python scripts/query.py --method dense
+    # Interactive mode
+    python scripts/query_milvus.py
     
-    # Sparse search only
-    python scripts/query.py --method sparse
-    
-    # Hybrid search with RRF fusion
-    python scripts/query.py --method hybrid
-    
-    # Use custom config
-    python scripts/query.py --config my_config.yaml --method hybrid
+    # Single query
+    python scripts/query_milvus.py --query "neural networks"
     
     # Override top-k
-    python scripts/query.py --method hybrid --top-k 20
+    python scripts/query_milvus.py --top-k 20
+    
+    # Disable reranking for faster queries
+    python scripts/query_milvus.py --no-rerank
 """
 
 import argparse
 import sys
 from pathlib import Path
-from collections import defaultdict
 from typing import List
 
 # Add src to path
@@ -28,23 +24,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.config import Config
 from src.retrieval.encoders import DenseEncoder, SparseEncoder
-from src.retrieval.indexers import DenseIndexer, SparseIndexer
-from src.retrieval.searchers import DenseSearcher, SparseSearcher, HybridSearcher, WeightedHybridSearcher, SearchResult
-from src.retrieval.query_rewriting import LLMQueryRewriter
-from src.retrieval.rerankers import CrossEncoderReranker
+from src.retrieval.searchers import MilvusHybridSearcher, SearchResult
+from src.retrieval.query_rewriting import LLMQueryRewriter, build_milvus_filter_expr
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Query dense, sparse, or hybrid search indexes"
-    )
-    
-    parser.add_argument(
-        "--method",
-        type=str,
-        required=True,
-        choices=["dense", "sparse", "hybrid"],
-        help="Search method: dense, sparse, or hybrid (RRF fusion)"
+        description="Query Milvus hybrid search with reranking"
     )
     
     parser.add_argument(
@@ -63,19 +49,7 @@ def parse_args():
     parser.add_argument(
         "--retrieval-k",
         type=int,
-        help="Override retrieval-k for hybrid (retrieve from each before fusion)"
-    )
-    
-    parser.add_argument(
-        "--dense-index",
-        type=str,
-        help="Override dense index directory"
-    )
-    
-    parser.add_argument(
-        "--sparse-index",
-        type=str,
-        help="Override sparse index directory"
+        help="Override retrieval-k for hybrid (retrieve from Milvus before reranking)"
     )
     
     parser.add_argument(
@@ -124,11 +98,12 @@ def parse_args():
     return parser.parse_args()
 
 
-def setup_dense_searcher(config: Config) -> DenseSearcher:
-    """Initialize dense searcher."""
-    print("Loading dense encoder and index...")
+def setup_milvus_searcher(config: Config) -> MilvusHybridSearcher:
+    """Initialize Milvus hybrid searcher."""
+    print("Loading encoders and connecting to Milvus...")
     
-    encoder = DenseEncoder(
+    # Dense encoder
+    dense_encoder = DenseEncoder(
         model_name=config.encoder.dense_model,
         device=config.encoder.device,
         normalize=config.encoder.normalize_dense,
@@ -137,135 +112,179 @@ def setup_dense_searcher(config: Config) -> DenseSearcher:
         specter2_query_adapter=config.encoder.specter2_query_adapter
     )
     
-    # Switch to query adapter for searching (documents were encoded with base adapter)
-    if encoder.use_specter2:
-        encoder.use_query_adapter()
+    # Switch to query adapter for searching
+    if dense_encoder.use_specter2:
+        dense_encoder.use_query_adapter()
     
-    indexer = DenseIndexer(
-        encoder=encoder,
-        output_dir=config.index.dense_output_dir
-    )
-    indexer.load()
-    
-    return DenseSearcher(indexer=indexer, encoder=encoder)
-
-
-def setup_sparse_searcher(config: Config) -> SparseSearcher:
-    """Initialize sparse searcher."""
-    print("Loading sparse encoder and index...")
-    
-    encoder = SparseEncoder(
+    # Sparse encoder
+    sparse_encoder = SparseEncoder(
         model_name=config.encoder.sparse_model,
         device=config.encoder.device,
         max_length=config.encoder.max_length
     )
     
-    indexer = SparseIndexer(
-        encoder=encoder,
-        output_dir=config.index.sparse_output_dir
+    # Create Milvus searcher
+    searcher = MilvusHybridSearcher(
+        dense_encoder=dense_encoder,
+        sparse_encoder=sparse_encoder,
+        host=config.milvus.host,
+        port=config.milvus.port,
+        collection_name=config.milvus.collection_name,
+        rrf_k=config.search.rrf_k
     )
-    indexer.load()
     
-    return SparseSearcher(indexer=indexer, encoder=encoder)
+    print(f"✓ Connected to Milvus at {config.milvus.host}:{config.milvus.port}")
+    print(f"✓ Using collection: {config.milvus.collection_name}\n")
+    
+    return searcher
 
 
-def setup_reranker(config: Config, doc_map: dict) -> CrossEncoderReranker:
-    """Initialize cross-encoder reranker."""
-    print("Loading cross-encoder reranker...")
+def setup_reranker(config: Config, searcher: MilvusHybridSearcher):
+    """Initialize reranker based on config type."""
+    reranker_type = config.reranker.type.lower()
     
-    # Extract doc_id -> text mapping from doc_map
-    doc_texts = {}
-    for idx, entry in doc_map.items():
-        if isinstance(entry, dict):
-            doc_texts[entry["id"]] = entry.get("text", "")
-        else:
-            # Old format compatibility
-            doc_texts[entry] = ""
+    if reranker_type == "qwen":
+        from src.retrieval.rerankers import QwenReranker
+        print(f"Loading Qwen reranker: {config.reranker.model}...")
+        
+        # Get all doc_ids from Milvus to build doc_texts mapping
+        # We'll fetch texts on-demand during reranking
+        doc_texts = {}
+        
+        reranker = QwenReranker(
+            doc_texts=doc_texts,
+            model_name=config.reranker.model,
+            device=config.encoder.device,
+            max_length=config.reranker.max_length,
+            batch_size=config.reranker.batch_size,
+            instruction=config.reranker.instruction
+        )
+    elif reranker_type == "jina":
+        from src.retrieval.rerankers import JinaReranker
+        print(f"Loading Jina reranker: {config.reranker.model}...")
+        
+        doc_texts = {}
+        
+        reranker = JinaReranker(
+            doc_texts=doc_texts,
+            model_name=config.reranker.model,
+            device=config.encoder.device,
+            batch_size=config.reranker.batch_size
+        )
+    else:  # cross-encoder (default)
+        from src.retrieval.rerankers import CrossEncoderReranker
+        print(f"Loading cross-encoder reranker: {config.reranker.model}...")
+        
+        doc_texts = {}
+        
+        reranker = CrossEncoderReranker(
+            doc_texts=doc_texts,
+            model_name=config.reranker.model,
+            device=config.encoder.device,
+            max_length=config.reranker.max_length,
+            batch_size=config.reranker.batch_size
+        )
     
-    reranker = CrossEncoderReranker(
-        doc_texts=doc_texts,
-        model_name=config.reranker.model,
-        device=config.encoder.device,
-        max_length=config.reranker.max_length,
-        batch_size=config.reranker.batch_size
-    )
+    # Set searcher for fetching texts on-demand
+    reranker._milvus_searcher = searcher
     
     return reranker
 
 
-def multi_query_rrf_fusion(result_lists: List[List[SearchResult]], top_k: int, rrf_k: int = 60) -> List[SearchResult]:
-    """Combine results from multiple queries using RRF.
-    
-    Args:
-        result_lists: List of result lists from different queries
-        top_k: Number of final results to return
-        rrf_k: RRF constant (default 60)
-        
-    Returns:
-        Fused results sorted by RRF score
-    """
-    rrf_scores = defaultdict(float)
-    
-    # Apply RRF across all result lists
-    for results in result_lists:
-        for result in results:
-            rrf_scores[result.doc_id] += 1.0 / (rrf_k + result.rank)
-    
-    # Sort by RRF score
-    sorted_docs = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
-    
-    # Create final results
-    fused_results = []
-    for rank, (doc_id, rrf_score) in enumerate(sorted_docs[:top_k], 1):
-        fused_results.append(SearchResult(
-            doc_id=doc_id,
-            score=rrf_score,
-            rank=rank
-        ))
-    
-    return fused_results
-
-
-def print_results(results, method: str, reranked: bool = False, show_components: bool = False):
+def print_results(results: List[SearchResult], reranked: bool = False, citation_boosted: bool = False):
     """Print search results in a formatted way."""
-    print(f"\n{'='*60}")
-    print(f"{method.upper()} SEARCH RESULTS")
-    print(f"{'='*60}")
+    print(f"\n{'='*70}")
+    print(f"MILVUS HYBRID SEARCH RESULTS")
+    if reranked:
+        print("(with reranking)")
+    if citation_boosted:
+        print("(with citation boost)")
+    print(f"{'='*70}")
     
     if not results:
         print("No results found.")
         return
     
     for result in results:
-        base_str = f"Rank {result.rank:2d} | Score: {result.score:8.4f} | Doc ID: {result.doc_id}"
+        # Base info
+        print(f"\nRank {result.rank:2d} | Score: {result.score:8.4f}")
+        print(f"  Doc ID: {result.doc_id}")
         
-        # Show component scores if available
-        if show_components and any([result.dense_score is not None, result.sparse_score is not None, result.cross_encoder_score is not None]):
-            components = []
-            if result.dense_score is not None:
-                components.append(f"Dense: {result.dense_score:.4f}")
-            if result.sparse_score is not None:
-                components.append(f"Sparse: {result.sparse_score:.4f}")
-            if result.cross_encoder_score is not None:
-                components.append(f"Cross: {result.cross_encoder_score:.4f}")
-            
-            if components:
-                base_str += f"\n         [{', '.join(components)}]"
+        # Show metadata if available
+        if hasattr(result, 'title') and result.title:
+            print(f"  Title: {result.title}")
+        if hasattr(result, 'publication_year') and result.publication_year:
+            print(f"  Year: {result.publication_year}")
+        if hasattr(result, 'citation_count') and result.citation_count is not None:
+            print(f"  Citations: {result.citation_count}")
         
-        print(base_str)
+        # Show reranker score if available
+        if reranked and result.cross_encoder_score is not None:
+            print(f"  Reranker Score: {result.cross_encoder_score:.4f}")
     
-    print(f"{'='*60}\n")
+    print(f"\n{'='*70}\n")
 
 
-def interactive_mode(searcher, method: str, config: Config, reranker=None, query_rewriter=None):
+def apply_citation_boost(results: List[SearchResult], citation_boost_weight: float = 0.1) -> List[SearchResult]:
+    """Apply simple citation boost to reranked results.
+    
+    Formula: final_score = rerank_score + citation_boost_weight * log(citations + 1)
+    
+    Args:
+        results: Reranked search results
+        citation_boost_weight: Weight for citation boost (default 0.1)
+        
+    Returns:
+        Results with citation-boosted scores, re-sorted and re-ranked
+    """
+    import math
+    
+    boosted_results = []
+    for result in results:
+        citation_count = result.citation_count if hasattr(result, 'citation_count') and result.citation_count is not None else 0
+        citation_boost = citation_boost_weight * math.log10(citation_count + 1)
+        
+        # Create new result with boosted score
+        boosted_result = SearchResult(
+            doc_id=result.doc_id,
+            score=result.score + citation_boost,  # Add boost to reranker score
+            rank=0,  # Will be updated after sorting
+            dense_score=result.dense_score,
+            sparse_score=result.sparse_score,
+            cross_encoder_score=result.cross_encoder_score,  # Preserve original reranker score
+            citation_count=citation_count,
+            publication_year=result.publication_year if hasattr(result, 'publication_year') else None
+        )
+        
+        # Copy metadata attributes
+        if hasattr(result, 'title'):
+            boosted_result.title = result.title
+        if hasattr(result, 'abstract'):
+            boosted_result.abstract = result.abstract
+        if hasattr(result, 'authors'):
+            boosted_result.authors = result.authors
+        if hasattr(result, 'categories'):
+            boosted_result.categories = result.categories
+        
+        boosted_results.append(boosted_result)
+    
+    # Sort by boosted score and update ranks
+    boosted_results.sort(key=lambda x: x.score, reverse=True)
+    for rank, result in enumerate(boosted_results, 1):
+        result.rank = rank
+    
+    return boosted_results
+
+
+def interactive_mode(searcher: MilvusHybridSearcher, config: Config, reranker=None, query_rewriter=None):
     """Run interactive query loop."""
     rerank_status = " with reranking" if reranker else ""
+    rewrite_status = ""
     if query_rewriter:
         num_rewrites = config.query_rewriting.num_rewrites
-        rewrite_status = f" with {num_rewrites} query rewrite(s) + multi-query RRF"
-    else:
-        rewrite_status = ""
-    print(f"\n{method.upper()} search ready{rerank_status}{rewrite_status}. Type your query (or 'exit' to quit).\n")
+        rewrite_status = f" with {num_rewrites} query rewrite(s)"
+    
+    print(f"\nMilvus hybrid search ready{rerank_status}{rewrite_status}. Type your query (or 'exit' to quit).\n")
     
     while True:
         try:
@@ -280,154 +299,185 @@ def interactive_mode(searcher, method: str, config: Config, reranker=None, query
         if query.lower() in ['exit', 'quit', 'q']:
             break
         
-        # Determine queries to execute
         original_query = query
-        queries_to_search = [original_query]
+        
+        # Extract filters and rewrite query if enabled
+        filter_expr = None
+        filter_info = None
         
         if query_rewriter:
-            rewritten_queries = query_rewriter.rewrite(original_query)
-            print(f"Original query: {original_query}")
-            for i, rewritten in enumerate(rewritten_queries, 1):
-                print(f"Rewritten query {i}: {rewritten}")
-            
-            # Add unique rewrites
-            for rewritten in rewritten_queries:
-                if rewritten.lower() != original_query.lower() and rewritten.lower() not in [q.lower() for q in queries_to_search]:
-                    queries_to_search.append(rewritten)
-            
-            if len(queries_to_search) > 1:
-                print(f"Retrieving results from {len(queries_to_search)} queries...")
-            else:
-                print(f"All rewrites identical to original, using single query...")
-        
-        # Search with all queries
-        retrieval_k = config.reranker.rerank_top_k if reranker else config.search.top_k
-        
-        # Check if using weighted fusion with query rewriting
-        if method == "hybrid" and isinstance(searcher, WeightedHybridSearcher) and len(queries_to_search) > 1:
-            # Weighted fusion with multi-query aggregation
-            results = searcher.search_multi_query(
-                queries_to_search,
-                top_k=retrieval_k,
-                retrieval_k=config.search.retrieval_k
+            from datetime import datetime
+            result = query_rewriter.extract_filters_and_rewrite(
+                original_query,
+                current_year=datetime.now().year
             )
-        else:
-            # Standard path: retrieve for each query and fuse
-            all_results = []
-            for query_text in queries_to_search:
-                if method == "hybrid":
-                    results = searcher.search(
-                        query_text,
-                        top_k=retrieval_k,
-                        retrieval_k=config.search.retrieval_k
-                    )
-                else:
-                    results = searcher.search(
-                        query_text,
-                        top_k=retrieval_k
-                    )
-                all_results.append(results)
             
-            # Fuse results if multiple queries
-            if len(all_results) > 1:
-                results = multi_query_rrf_fusion(
-                    all_results,
-                    top_k=retrieval_k,
-                    rrf_k=config.search.rrf_k
-                )
+            filters = result.get('filters', {})
+            confidence = result.get('confidence', 0.0)
+            rewrites = result.get('rewrites', [original_query])
+            
+            # Display filter info
+            if filters:
+                year_filter = filters.get('year', {})
+                citation_filter = filters.get('citation_count', {})
+                
+                filter_parts = []
+                if year_filter.get('min') or year_filter.get('max'):
+                    if year_filter.get('min') and year_filter.get('max'):
+                        if year_filter['min'] == year_filter['max']:
+                            filter_parts.append(f"Year: {year_filter['min']}")
+                        else:
+                            filter_parts.append(f"Year: {year_filter['min']}-{year_filter['max']}")
+                    elif year_filter.get('min'):
+                        filter_parts.append(f"Year: ≥{year_filter['min']}")
+                    else:
+                        filter_parts.append(f"Year: ≤{year_filter['max']}")
+                
+                if citation_filter.get('min'):
+                    filter_parts.append(f"Citations: ≥{citation_filter['min']}")
+                
+                if filter_parts:
+                    filter_info = f"🔍 Filters: {', '.join(filter_parts)} (confidence: {confidence:.2f})"
+                else:
+                    filter_info = "🔍 No filters applied"
+                
+                # Build filter expression if confidence is high enough
+                if confidence >= config.query_rewriting.filter_confidence_threshold:
+                    filter_expr = build_milvus_filter_expr(
+                        filters,
+                        enable_citation_filters=config.query_rewriting.enable_citation_filters,
+                        enable_year_filters=config.query_rewriting.enable_year_filters
+                    )
             else:
-                results = all_results[0]
+                filter_info = "🔍 No filters applied"
+            
+            # Display filter status
+            print(filter_info)
+            
+            # Display rewrites
+            if rewrites and rewrites[0] != original_query:
+                print(f"Rewritten query: {rewrites[0]}")
+        
+        # Search with Milvus with filter (use rewrites as query_variants if available)
+        retrieval_k = config.reranker.rerank_top_k if reranker else config.search.top_k
+        query_variants = rewrites[1:] if rewrites and len(rewrites) > 1 else None  # Skip first rewrite (already displayed)
+        results = searcher.search(original_query, top_k=retrieval_k, filter_expr=filter_expr, query_variants=query_variants)
+        
+        # Fallback: if filters are too restrictive, retry without them
+        if filter_expr and len(results) < 5:
+            print(f"⚠️  Only {len(results)} results with filters. Retrying without filters...")
+            results = searcher.search(original_query, top_k=retrieval_k, filter_expr=None, query_variants=query_variants)
         
         # Rerank if enabled
         if reranker and results:
+            # Build doc_texts for reranker from abstract attribute
+            doc_texts = {r.doc_id: r.abstract[:512] if hasattr(r, 'abstract') else '' for r in results}
+            reranker.doc_texts = doc_texts
+            
+            # Rerank
             results = reranker.rerank(original_query, results, top_k=config.search.top_k)
             
-            # Apply weighted fusion if using WeightedHybridSearcher
-            if isinstance(searcher, WeightedHybridSearcher):
-                results = searcher.apply_weighted_fusion(results, normalize=config.search.normalize_scores)
+            # Apply citation boost
+            if config.reranker.citation_boost_weight > 0:
+                results = apply_citation_boost(results, config.reranker.citation_boost_weight)
         
-        show_components = isinstance(searcher, WeightedHybridSearcher)
-        print_results(results, method, reranked=(reranker is not None), show_components=show_components)
+        print_results(results, reranked=(reranker is not None), citation_boosted=(config.reranker.citation_boost_weight > 0 if reranker else False))
 
 
-def single_query_mode(searcher, query: str, method: str, config: Config, reranker=None, query_rewriter=None):
+def single_query_mode(searcher: MilvusHybridSearcher, query: str, config: Config, reranker=None, query_rewriter=None):
     """Execute a single query and exit."""
     rerank_status = " with reranking" if reranker else ""
+    rewrite_status = ""
     if query_rewriter:
-        num_rewrites = config.query_rewriting.num_rewrites
-        rewrite_status = f" with {num_rewrites} query rewrite(s) + multi-query RRF"
-    else:
-        rewrite_status = ""
-    print(f"\nExecuting {method} search{rerank_status}{rewrite_status} for: {query}\n")
+        rewrite_status = " with filter extraction"
     
-    # Determine queries to execute
+    print(f"\nExecuting Milvus hybrid search{rerank_status}{rewrite_status} for: {query}\n")
+    
     original_query = query
-    queries_to_search = [original_query]
+    
+    # Extract filters and rewrite query if enabled
+    filter_expr = None
+    filter_info = None
+
+    rewrites = None
     
     if query_rewriter:
-        rewritten_queries = query_rewriter.rewrite(original_query)
-        print(f"Original query: {original_query}")
-        for i, rewritten in enumerate(rewritten_queries, 1):
-            print(f"Rewritten query {i}: {rewritten}")
-        
-        # Add unique rewrites
-        for rewritten in rewritten_queries:
-            if rewritten.lower() != original_query.lower() and rewritten.lower() not in [q.lower() for q in queries_to_search]:
-                queries_to_search.append(rewritten)
-        
-        if len(queries_to_search) > 1:
-            print(f"Retrieving results from {len(queries_to_search)} queries...\n")
-        else:
-            print(f"All rewrites identical to original, using single query...\n")
-    
-    # Search with all queries
-    retrieval_k = config.reranker.rerank_top_k if reranker else config.search.top_k
-    
-    # Check if using weighted fusion with query rewriting
-    if method == "hybrid" and isinstance(searcher, WeightedHybridSearcher) and len(queries_to_search) > 1:
-        # Weighted fusion with multi-query aggregation
-        results = searcher.search_multi_query(
-            queries_to_search,
-            top_k=retrieval_k,
-            retrieval_k=config.search.retrieval_k
+        from datetime import datetime
+        result = query_rewriter.extract_filters_and_rewrite(
+            original_query,
+            current_year=datetime.now().year
         )
-    else:
-        # Standard path: retrieve for each query and fuse
-        all_results = []
-        for query_text in queries_to_search:
-            if method == "hybrid":
-                results = searcher.search(
-                    query_text,
-                    top_k=retrieval_k,
-                    retrieval_k=config.search.retrieval_k
-                )
-            else:
-                results = searcher.search(
-                    query_text,
-                    top_k=retrieval_k
-                )
-            all_results.append(results)
         
-        # Fuse results if multiple queries
-        if len(all_results) > 1:
-            results = multi_query_rrf_fusion(
-                all_results,
-                top_k=retrieval_k,
-                rrf_k=config.search.rrf_k
-            )
+        filters = result.get('filters', {})
+        confidence = result.get('confidence', 0.0)
+        rewrites = result.get('rewrites', [original_query])
+        
+        # Display filter info
+        if filters:
+            year_filter = filters.get('year', {})
+            citation_filter = filters.get('citation_count', {})
+            
+            filter_parts = []
+            if year_filter.get('min') or year_filter.get('max'):
+                if year_filter.get('min') and year_filter.get('max'):
+                    if year_filter['min'] == year_filter['max']:
+                        filter_parts.append(f"Year: {year_filter['min']}")
+                    else:
+                        filter_parts.append(f"Year: {year_filter['min']}-{year_filter['max']}")
+                elif year_filter.get('min'):
+                    filter_parts.append(f"Year: ≥{year_filter['min']}")
+                else:
+                    filter_parts.append(f"Year: ≤{year_filter['max']}")
+            
+            if citation_filter.get('min'):
+                filter_parts.append(f"Citations: ≥{citation_filter['min']}")
+            
+            if filter_parts:
+                filter_info = f"🔍 Filters: {', '.join(filter_parts)} (confidence: {confidence:.2f})"
+            else:
+                filter_info = "🔍 No filters applied"
+            
+            # Build filter expression if confidence is high enough
+            if confidence >= config.query_rewriting.filter_confidence_threshold:
+                filter_expr = build_milvus_filter_expr(
+                    filters,
+                    enable_citation_filters=config.query_rewriting.enable_citation_filters,
+                    enable_year_filters=config.query_rewriting.enable_year_filters
+                )
         else:
-            results = all_results[0]
+            filter_info = "🔍 No filters applied"
+        
+        # Display filter status
+        print(filter_info)
+        
+        # Display rewrites
+        if rewrites and rewrites[0] != original_query:
+            print(f"Rewritten query: {rewrites[0]}\n")
+    
+    # Search with Milvus with filter (use rewrites as query_variants if available)
+    retrieval_k = config.reranker.rerank_top_k if reranker else config.search.top_k
+    query_variants = rewrites[1:] if rewrites and len(rewrites) > 1 else None  # Skip first rewrite (already displayed)
+    results = searcher.search(original_query, top_k=retrieval_k, filter_expr=filter_expr, query_variants=query_variants)
+    
+    # Fallback: if filters are too restrictive, retry without them
+    if filter_expr and len(results) < 5:
+        print(f"⚠️  Only {len(results)} results with filters. Retrying without filters...\n")
+        results = searcher.search(original_query, top_k=retrieval_k, filter_expr=None, query_variants=query_variants)
     
     # Rerank if enabled
     if reranker and results:
+        # Build doc_texts for reranker from abstract attribute
+        doc_texts = {r.doc_id: r.abstract[:512] if hasattr(r, 'abstract') else '' for r in results}
+        reranker.doc_texts = doc_texts
+        
+        # Rerank
         results = reranker.rerank(original_query, results, top_k=config.search.top_k)
         
-        # Apply weighted fusion if using WeightedHybridSearcher
-        if isinstance(searcher, WeightedHybridSearcher):
-            results = searcher.apply_weighted_fusion(results, normalize=config.search.normalize_scores)
+        # Apply citation boost
+        if config.reranker.citation_boost_weight > 0:
+            results = apply_citation_boost(results, config.reranker.citation_boost_weight)
     
-    show_components = isinstance(searcher, WeightedHybridSearcher)
-    print_results(results, method, reranked=(reranker is not None), show_components=show_components)
+    print_results(results, reranked=(reranker is not None), citation_boosted=(config.reranker.citation_boost_weight > 0 if reranker else False))
 
 
 def main():
@@ -450,10 +500,6 @@ def main():
         config.search.retrieval_k = args.retrieval_k
     if args.rerank_top_k:
         config.reranker.rerank_top_k = args.rerank_top_k
-    if args.dense_index:
-        config.index.dense_output_dir = args.dense_index
-    if args.sparse_index:
-        config.index.sparse_output_dir = args.sparse_index
     if args.device:
         config.encoder.device = args.device
     
@@ -469,108 +515,22 @@ def main():
     elif args.no_rewrite:
         config.query_rewriting.enabled = False
     
-    # Setup searcher based on method
-    print("\n" + "="*60)
-    print(f"INITIALIZING {args.method.upper()} SEARCH")
-    print("="*60 + "\n")
+    # Setup Milvus searcher
+    print("\n" + "="*70)
+    print("INITIALIZING MILVUS HYBRID SEARCH")
+    print("="*70 + "\n")
     
-    indexer_for_reranker = None  # Will hold the indexer with doc_map
+    searcher = setup_milvus_searcher(config)
     
-    if args.method == "dense":
-        encoder = DenseEncoder(
-            model_name=config.encoder.dense_model,
-            device=config.encoder.device,
-            normalize=config.encoder.normalize_dense,
-            use_specter2=config.encoder.use_specter2,
-            specter2_base_adapter=config.encoder.specter2_base_adapter,
-            specter2_query_adapter=config.encoder.specter2_query_adapter
-        )
-        
-        # Switch to query adapter for searching
-        if encoder.use_specter2:
-            encoder.use_query_adapter()
-        indexer_for_reranker = DenseIndexer(
-            encoder=encoder,
-            output_dir=config.index.dense_output_dir
-        )
-        indexer_for_reranker.load()
-        searcher = DenseSearcher(indexer=indexer_for_reranker, encoder=encoder)
-        
-    elif args.method == "sparse":
-        encoder = SparseEncoder(
-            model_name=config.encoder.sparse_model,
-            device=config.encoder.device,
-            max_length=config.encoder.max_length
-        )
-        indexer_for_reranker = SparseIndexer(
-            encoder=encoder,
-            output_dir=config.index.sparse_output_dir
-        )
-        indexer_for_reranker.load()
-        searcher = SparseSearcher(indexer=indexer_for_reranker, encoder=encoder)
-        
-    elif args.method == "hybrid":
-        dense_encoder = DenseEncoder(
-            model_name=config.encoder.dense_model,
-            device=config.encoder.device,
-            normalize=config.encoder.normalize_dense,
-            use_specter2=config.encoder.use_specter2,
-            specter2_base_adapter=config.encoder.specter2_base_adapter,
-            specter2_query_adapter=config.encoder.specter2_query_adapter
-        )
-        
-        # Switch to query adapter for searching
-        if dense_encoder.use_specter2:
-            dense_encoder.use_query_adapter()
-        dense_indexer = DenseIndexer(
-            encoder=dense_encoder,
-            output_dir=config.index.dense_output_dir
-        )
-        dense_indexer.load()
-        dense_searcher = DenseSearcher(indexer=dense_indexer, encoder=dense_encoder)
-        
-        sparse_encoder = SparseEncoder(
-            model_name=config.encoder.sparse_model,
-            device=config.encoder.device,
-            max_length=config.encoder.max_length
-        )
-        sparse_indexer = SparseIndexer(
-            encoder=sparse_encoder,
-            output_dir=config.index.sparse_output_dir
-        )
-        sparse_indexer.load()
-        sparse_searcher = SparseSearcher(indexer=sparse_indexer, encoder=sparse_encoder)
-        
-        # Choose searcher based on fusion method
-        if config.search.fusion_method == "weighted":
-            searcher = WeightedHybridSearcher(
-                dense_searcher=dense_searcher,
-                sparse_searcher=sparse_searcher,
-                rrf_k=config.search.rrf_k,
-                dense_weight=config.search.dense_weight,
-                sparse_weight=config.search.sparse_weight,
-                cross_encoder_weight=config.search.cross_encoder_weight,
-                normalize_scores=config.search.normalize_scores
-            )
-            print(f"Using weighted fusion: dense={config.search.dense_weight:.2f}, sparse={config.search.sparse_weight:.2f}, cross={config.search.cross_encoder_weight:.2f}")
-        else:
-            searcher = HybridSearcher(
-                dense_searcher=dense_searcher,
-                sparse_searcher=sparse_searcher,
-                rrf_k=config.search.rrf_k
-            )
-            print("Using standard RRF fusion")
-        
-        # Use dense indexer's doc_map for reranker (both should have same docs)
-        indexer_for_reranker = dense_indexer
-    
-    print("✓ Initialization complete\n")
+    print("✓ Milvus searcher ready\n")
     
     # Setup reranker if enabled
     reranker = None
-    if config.reranker.enabled and indexer_for_reranker:
-        reranker = setup_reranker(config, indexer_for_reranker.doc_map)
+    if config.reranker.enabled:
+        reranker = setup_reranker(config, searcher)
         print("✓ Reranker ready\n")
+        if config.reranker.citation_boost_weight > 0:
+            print(f"Citation boost enabled: weight={config.reranker.citation_boost_weight:.2f}\n")
     
     # Setup query rewriter if enabled
     query_rewriter = None
@@ -587,9 +547,9 @@ def main():
     
     # Run in appropriate mode
     if args.query:
-        single_query_mode(searcher, args.query, args.method, config, reranker, query_rewriter)
+        single_query_mode(searcher, args.query, config, reranker, query_rewriter)
     else:
-        interactive_mode(searcher, args.method, config, reranker, query_rewriter)
+        interactive_mode(searcher, config, reranker, query_rewriter)
 
 
 if __name__ == "__main__":

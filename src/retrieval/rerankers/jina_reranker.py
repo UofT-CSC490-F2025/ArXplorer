@@ -1,43 +1,53 @@
-"""Cross-encoder reranker for refining search results."""
+"""Jina reranker for refining search results."""
 
 import torch
 from typing import List, Dict
-from sentence_transformers import CrossEncoder
+from transformers import AutoModel
 
 from .base import BaseReranker
 from ..searchers.base import SearchResult
 
 
-class CrossEncoderReranker(BaseReranker):
-    """Reranker using cross-encoder models for precise relevance scoring."""
+class JinaReranker(BaseReranker):
+    """Reranker using Jina AI's jina-reranker-v3 model (0.6B listwise reranker)."""
     
     def __init__(
         self,
         doc_texts: Dict[str, str],
-        model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
+        model_name: str = "jinaai/jina-reranker-v3",
         device: str = None,
-        max_length: int = 512,
         batch_size: int = 32
     ):
         """
         Args:
             doc_texts: Mapping of doc_id → document text
-            model_name: HuggingFace cross-encoder model identifier
+            model_name: HuggingFace Jina reranker model identifier
             device: Device to use ('cuda', 'cpu', or None for auto)
-            max_length: Maximum token length for (query, doc) pairs
-            batch_size: Batch size for cross-encoder inference
+            batch_size: Batch size for reranker inference (max 64 docs per batch)
         """
         self.doc_texts = doc_texts
         self.model_name = model_name
-        self.max_length = max_length
-        self.batch_size = batch_size
+        self.batch_size = min(batch_size, 64)  # Jina processes up to 64 docs at once
         
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = device
         
-        print(f"Loading cross-encoder: {model_name} on {device}")
-        self.model = CrossEncoder(model_name, device=device, max_length=max_length)
+        print(f"Loading Jina reranker: {model_name} on {device}")
+        self.model = AutoModel.from_pretrained(
+            model_name,
+            trust_remote_code=True
+        )
+        
+        # Move to device if CUDA
+        if device == "cuda":
+            self.model = self.model.to(device)
+        
+        self.model.eval()
+        
+        # Report model size
+        param_count = sum(p.numel() for p in self.model.parameters())
+        print(f"  Model loaded: {param_count / 1e9:.2f}B parameters")
     
     def rerank(
         self,
@@ -46,10 +56,10 @@ class CrossEncoderReranker(BaseReranker):
         top_k: int = 10
     ) -> List[SearchResult]:
         """
-        Rerank results using cross-encoder.
+        Rerank results using Jina reranker.
         
         Preserves dense_score and sparse_score from original results,
-        and populates cross_encoder_score.
+        and populates cross_encoder_score with the reranker score.
         
         Args:
             query: Query text
@@ -62,41 +72,47 @@ class CrossEncoderReranker(BaseReranker):
         if not results:
             return []
         
-        # Prepare query-document pairs
-        pairs = []
+        # Prepare documents list
+        documents = []
         valid_results = []
         
         for result in results:
             doc_text = self.doc_texts.get(result.doc_id)
             if doc_text:
-                pairs.append([query, doc_text])
+                documents.append(doc_text)
                 valid_results.append(result)
             else:
-                # Keep results without text at the end with low scores
                 print(f"Warning: No text found for doc_id {result.doc_id}, skipping reranking")
         
-        if not pairs:
+        if not documents:
             print("Warning: No valid document texts found for reranking")
             return results[:top_k]
         
-        # Score all pairs with cross-encoder
-        scores = self.model.predict(
-            pairs,
-            batch_size=self.batch_size,
-            show_progress_bar=False,
-            convert_to_numpy=True
-        )
+        # Rerank using Jina's API (processes all docs at once, up to 64)
+        # For larger batches, we need to split
+        all_scores = []
         
-        # Update results with cross-encoder scores (preserve ALL component scores)
+        with torch.no_grad():
+            for i in range(0, len(documents), self.batch_size):
+                batch_docs = documents[i:i + self.batch_size]
+                
+                # Jina reranker returns list of dicts with 'relevance_score', 'document', 'index'
+                batch_results = self.model.rerank(query, batch_docs)
+                
+                # Extract scores (results are already sorted by relevance)
+                batch_scores = [r['relevance_score'] for r in batch_results]
+                all_scores.extend(batch_scores)
+        
+        # Update results with reranker scores (preserve ALL component scores)
         reranked_results = []
-        for idx, (result, score) in enumerate(zip(valid_results, scores)):
+        for idx, (result, score) in enumerate(zip(valid_results, all_scores)):
             new_result = SearchResult(
                 doc_id=result.doc_id,
-                score=float(score),  # Temporarily set to cross-encoder score
+                score=float(score),  # Temporarily set to reranker score
                 rank=0,  # Will be set after sorting
                 dense_score=result.dense_score,  # Preserve
                 sparse_score=result.sparse_score,  # Preserve
-                cross_encoder_score=float(score),  # Populate
+                cross_encoder_score=float(score),  # Populate with reranker score
                 citation_score=result.citation_score,  # Preserve citation metadata
                 citation_count=result.citation_count,  # Preserve citation count
                 publication_year=result.publication_year,  # Preserve publication year
@@ -114,7 +130,7 @@ class CrossEncoderReranker(BaseReranker):
             
             reranked_results.append(new_result)
         
-        # Sort by cross-encoder score (descending)
+        # Sort by reranker score (descending)
         reranked_results.sort(key=lambda x: x.score, reverse=True)
         
         # Update ranks

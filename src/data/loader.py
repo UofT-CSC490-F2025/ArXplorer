@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 from typing import Iterator, Optional
+from datetime import datetime
 
 from .document import Document
 
@@ -46,6 +47,34 @@ class StreamingJSONLLoader:
         
         if not self.filepath.exists():
             raise FileNotFoundError(f"Data file not found: {filepath}")
+    
+    def _parse_year_from_date(self, date_string: str) -> Optional[int]:
+        """
+        Extract year from date string.
+        
+        Handles formats like: "Sun, 1 Apr 2007 13:06:50 GMT"
+        
+        Args:
+            date_string: Date string to parse
+            
+        Returns:
+            Year as integer, or None if parsing fails
+        """
+        if not date_string:
+            return None
+        
+        try:
+            # Try RFC 2822 format (e.g., "Sun, 1 Apr 2007 13:06:50 GMT")
+            dt = datetime.strptime(date_string, "%a, %d %b %Y %H:%M:%S %Z")
+            return dt.year
+        except (ValueError, AttributeError):
+            # Try to extract year with simple parsing (YYYY in string)
+            import re
+            match = re.search(r'\b(19|20)\d{2}\b', date_string)
+            if match:
+                return int(match.group(0))
+        
+        return None
     
     def load(self) -> Iterator[Document]:
         """Stream documents one at a time from JSONL file."""
@@ -109,6 +138,11 @@ class StreamingJSONLLoader:
                 if self.skip_empty and not text:
                     continue
                 
+                # Extract publication year from published_date field
+                published_year = None
+                if 'published_date' in data:
+                    published_year = self._parse_year_from_date(data['published_date'])
+                
                 # Store remaining fields as metadata
                 metadata = {k: v for k, v in data.items() 
                            if k not in [self.text_key, self.id_key, self.title_key]}
@@ -117,7 +151,8 @@ class StreamingJSONLLoader:
                     id=doc_id,
                     text=text,
                     title=title,
-                    metadata=metadata if metadata else None
+                    metadata=metadata if metadata else None,
+                    published_year=published_year
                 )
     
     def count_documents(self) -> int:

@@ -1,23 +1,73 @@
-# Retrieval System - Dense, Sparse, and Hybrid Search with Query Rewriting
+# ArXplorer - Academic Paper Retrieval with Milvus
 
-A modular retrieval system supporting dense (SPECTER), sparse (SPLADE), and hybrid search with Reciprocal Rank Fusion. Includes LLM-based query rewriting with Qwen for improved retrieval robustness.
+A production-grade academic paper retrieval system using Milvus vector database for unified hybrid search (dense + sparse), with advanced query rewriting and multiple reranking options.
 
 ## Quick Start
 
-### 1. Setup Environment
+### 1. Setup Milvus with Docker
+
+**Install Docker Desktop** (if not already installed):
+- Windows/Mac: Download from [docker.com](https://www.docker.com/products/docker-desktop/)
+- Linux: Follow [official installation guide](https://docs.docker.com/engine/install/)
+
+**Start Milvus standalone instance**:
 
 ```powershell
-# Create conda environment from provided environment.yml
+# Using Docker Compose (recommended)
+docker-compose -f docker-compose.milvus.yml up -d
+
+# Verify Milvus is running
+docker-compose ps
+
+# Expected output:
+# NAME           IMAGE                PORTS
+# milvus-milvus  milvusdb/milvus      0.0.0.0:19530->19530/tcp, 0.0.0.0:9091->9091/tcp
+# milvus-etcd    quay.io/coreos/etcd  2379/tcp, 2380/tcp
+# milvus-minio   minio/minio          9000/tcp, 9001/tcp
+
+# Check Milvus health
+curl http://localhost:9091/healthz
+# Should return: OK
+```
+
+**Milvus management** (optional):
+```powershell
+# Stop Milvus
+docker-compose down
+
+# Stop and remove all data (fresh start)
+docker-compose down -v
+
+# View logs
+docker-compose logs -f milvus
+
+# Restart Milvus
+docker-compose restart
+```
+
+**Alternative: Docker run command** (if docker-compose not available):
+```powershell
+docker run -d --name milvus-standalone \
+  -p 19530:19530 -p 9091:9091 \
+  -e ETCD_ENDPOINTS=etcd:2379 \
+  -e MINIO_ADDRESS=minio:9000 \
+  milvusdb/milvus:v2.4.15 milvus run standalone
+```
+
+### 2. Setup Python Environment
+
+```powershell
+# Create conda environment
 conda env create -f environment.yml -n arxplorer-env
 conda activate arxplorer-env
 ```
 
-### 2. Prepare Dataset
+### 3. Prepare Dataset
 
 Download the Kaggle arXiv dataset and extract papers to JSONL format:
 
 ```powershell
-# 1. Download the arXiv dataset from Kaggle
+# 1. Download arXiv dataset from Kaggle
 # Visit: https://www.kaggle.com/datasets/Cornell-University/arxiv
 # Download and extract to: data/kaggle_arxiv/
 
@@ -31,64 +81,74 @@ python scripts/create_arxiv_dataset.py --categories cs.ai,cs.lg,stat.ml --limit 
 python scripts/create_arxiv_dataset.py --no-filter --limit 500000
 ```
 
-This creates `data/arxiv_300k.jsonl` with standardized fields (id, title, abstract, categories, authors, etc.).
+This creates `data/arxiv_300k.jsonl` with standardized fields (id, title, abstract, categories, authors, year).
 
-### 3. Build Indexes
+### 4. Build Milvus Index
 
 ```powershell
-# Build both dense and sparse indexes (required for hybrid search)
-python scripts/encode.py --method both --data-file data/arxiv_300k.jsonl
+# Encode documents and load into Milvus (dense + sparse + metadata)
+python scripts/encode.py --data-file data/arxiv_300k.jsonl
 
-# Or build individually
-python scripts/encode.py --method dense --data-file data/arxiv_1k.jsonl
-python scripts/encode.py --method sparse --data-file data/arxiv_1k.jsonl
+# Or use smaller dataset for testing
+python scripts/encode.py --data-file data/arxiv_1k.jsonl
 ```
 
-### 4. Query the Indexes
+This will:
+- Encode documents with SPECTER (dense) and SPLADE (sparse)
+- Create Milvus collection with hybrid indexes
+- Store all metadata (title, authors, year, categories, etc.)
+
+### 5. Query the System
 
 ```powershell
-# Hybrid search with reranking (default: enabled)
-python scripts/query.py --method hybrid
+# Interactive hybrid search with reranking (default)
+python scripts/query.py
 
-# Hybrid search with query rewriting (generates multiple query variants)
-python scripts/query.py --method hybrid --rewrite-query
-
-# Hybrid search without reranking
-python scripts/query.py --method hybrid --no-rerank
-
-# Dense or sparse search with reranking
-python scripts/query.py --method dense --rerank
-python scripts/query.py --method sparse --rerank
+# With query rewriting and filter extraction
+python scripts/query.py --rewrite-query
 
 # Single query (non-interactive)
-python scripts/query.py --method hybrid --query "neural networks for NLP"
+python scripts/query.py --query "attention is all you need"
 
-# Override reranking parameters
-python scripts/query.py --method hybrid --rerank-top-k 50 --top-k 5
+# Override top-k results
+python scripts/query.py --top-k 20
+
+# Disable reranking for faster queries
+python scripts/query.py --no-rerank
 ```
 
 ## Architecture
+
+**Milvus-Only Architecture** (Production-Ready):
 
 ```
 src/
 ├── config/          # YAML configuration management
 ├── data/            # Document dataclass and streaming JSONL loader
 └── retrieval/
-    ├── encoders/    # Dense (SPECTER) and Sparse (SPLADE) encoders
-    ├── indexers/    # FAISS and scipy sparse indexers
-    ├── searchers/   # Dense, sparse, and hybrid (RRF) searchers
-    ├── rerankers/   # Cross-encoder reranking for result refinement
-    └── query_rewriting/  # LLM-based query rewriting (Qwen)
+    ├── encoders/    # Dense (SPECTER/SPECTER2) and Sparse (SPLADE) encoders
+    ├── indexers/    # MilvusIndexer - unified hybrid indexer
+    ├── searchers/   # MilvusHybridSearcher - unified search with RRF
+    ├── rerankers/   # CrossEncoderReranker, QwenReranker, JinaReranker
+    └── query_rewriting/  # LLM-based filter extraction + query rewriting (Qwen)
 
 scripts/
-├── encode.py        # Unified encoding CLI
-├── query.py         # Unified query CLI with multi-query fusion
+├── encode.py        # Build Milvus index (dense + sparse + metadata)
+├── query.py         # Query Milvus with hybrid search + reranking
 └── create_arxiv_dataset.py  # Extract papers from Kaggle dataset
-
-data/
-├── dense_index/     # FAISS index + embeddings + doc_map
-└── sparse_index/    # Scipy sparse matrix + doc_map
 ```
+
+**Milvus Unified Storage**:
+- Dense vectors (SPECTER): IVF_FLAT index
+- Sparse vectors (SPLADE): SPARSE_INVERTED_INDEX
+- Metadata: title, abstract, authors, categories, year, citation_count
+- Replaces: FAISS, scipy, doc_map.json, MongoDB
+
+**Key Benefits**:
+- Single source of truth for all data
+- Built-in hybrid search with RRF fusion
+- Scalar filtering (year, citations) integrated with vector search
+- Production-ready with backup/restore capabilities
 
 ## Configuration
 
@@ -98,211 +158,346 @@ Edit `config.yaml` to customize:
 encoder:
   dense_model: "sentence-transformers/allenai-specter"
   sparse_model: "naver/splade-v3"
+  use_specter2: true  # Use SPECTER2 with adapters
+  specter2_base_adapter: "allenai/specter2"  # For documents
+  specter2_query_adapter: "allenai/specter2_adhoc_query"  # For queries
   
 index:
   batch_size: 16
-  dense_output_dir: "data/dense_index"
-  sparse_output_dir: "data/sparse_index"
+  sparse_encoder_batch_size: 4  # SPLADE uses more VRAM
+
+milvus:
+  host: "localhost"
+  port: 19530
+  collection_name: "arxplorer_papers"
+  dense_index_type: "IVF_FLAT"  # Or HNSW for >1M docs
+  dense_nlist: 1024  # Number of IVF clusters
+  sparse_index_type: "SPARSE_INVERTED_INDEX"
+  batch_size: 1000  # Insert batch size
   
 search:
   top_k: 10          # Final results to return
-  retrieval_k: 100   # Retrieve from each system before fusion
   rrf_k: 60          # RRF constant (default from literature)
 
 reranker:
-  enabled: true      # Enable cross-encoder reranking
-  model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
-  rerank_top_k: 100  # Number of candidates to rerank
-  batch_size: 32
-
+  enabled: true
+  type: "jina"       # Options: cross-encoder, qwen, jina
+  model: "jinaai/jina-reranker-v3"
+  rerank_top_k: 50   # Number of candidates to rerank
+  batch_size: 50     # Jina: MUST match rerank_top_k for listwise comparison!
+  
 query_rewriting:
-  enabled: false     # Enable LLM-based query rewriting (requires --rewrite-query flag)
-  model: "Qwen/Qwen2.5-3B-Instruct"  # Instruction-tuned causal LM
-  num_rewrites: 2    # Number of query variants to generate
-  device: "cuda"     # Use GPU for fast inference
+  enabled: true
+  model: "Qwen/Qwen3-4B-Instruct-2507-FP8"
+  num_rewrites: 1    # Number of query variants
+  filter_confidence_threshold: 0.7  # Minimum confidence for filters
+  enable_year_filters: true   # Extract year constraints
+  enable_citation_filters: false  # Extract citation constraints
+
+data:
+  jsonl_file: "data/arxiv_300k.jsonl"
+  use_metadata: true  # Encode title + authors + year + categories
+  metadata_template: 'Title: {title}\n\nAuthors: {authors}\n\nYear: {year}\n\nCategories: {categories}\n\nAbstract: {abstract}'
 ```
 
 CLI arguments override config values:
 
 ```powershell
-python scripts/encode.py --method both --batch-size 32 --device cuda
-python scripts/query.py --method hybrid --top-k 20 --retrieval-k 200
+python scripts/encode.py --batch-size 32 --data-file data/custom.jsonl
+python scripts/query.py --top-k 20 --no-rerank
 ```
 
 ## Key Features
 
-### LLM-Based Query Rewriting
-- **Model**: Qwen/Qwen3-4B-Instruct (instruction-tuned causal LM)
-- **Multi-query generation**: Creates N diverse query variants (configurable via `num_rewrites`)
+### Milvus Vector Database
+- **Unified storage**: Dense + sparse vectors + metadata in single collection
+- **Hybrid search**: Built-in RRF fusion with configurable k parameter
+- **Scalar filtering**: Year and citation filtering integrated with vector search
+- **Production-ready**: Distributed architecture, backup/restore, high availability
+- **Efficient indexing**: IVF_FLAT for dense (300k docs), SPARSE_INVERTED_INDEX for sparse
+
+### LLM-Based Query Rewriting & Filter Extraction
+- **Model**: Qwen3-4B-Instruct (instruction-tuned causal LM)
+- **Dual functionality**:
+  1. **Filter extraction**: Detects canonical intent ("original", "seminal") and extracts year/citation constraints
+  2. **Query rewriting**: Generates alternative phrasings for better recall
+- **Dynamic filtering**: `year >= 2017 and citation_count >= 5000` applied to Milvus search
 - **Multi-query fusion**: Combines results from original + rewritten queries using RRF
-- **Robustness**: Improves recall by capturing alternative phrasings and terminology
-- **Use case**: Especially effective for finding canonical papers with varied citation styles
+- **Use case**: Especially effective for finding foundational papers with varied citation styles
 
-### Three-Stage Retrieval Pipeline
-1. **Query rewriting (optional)**: Generate diverse query variants with Qwen LLM
-2. **First-stage retrieval**: Dense (SPECTER) + Sparse (SPLADE) with configurable retrieval_k (default 100)
-3. **Fusion**: Reciprocal Rank Fusion (RRF) to combine rankings (multi-query if rewriting enabled)
-4. **Reranking**: Cross-encoder (ms-marco-MiniLM) for precise relevance scoring on top candidates
+### Advanced Reranking Options
+Three reranker types available via config:
 
-### Hybrid Search with RRF
-- Combines dense semantic search (SPECTER) with sparse lexical search (SPLADE)
-- Uses Reciprocal Rank Fusion (RRF) - no score normalization needed
-- Formula: `RRF(doc) = Σ 1/(k + rank_i(doc))` where k=60
+1. **Cross-Encoder** (fastest, 33M params)
+   - Model: `cross-encoder/ms-marco-MiniLM-L-12-v2`
+   - Best for: General queries, speed-critical applications
+   - Latency: ~200-300ms for 50 docs
 
-### Cross-Encoder Reranking
-- Refines top candidates with query-document relevance modeling
-- Default: `cross-encoder/ms-marco-MiniLM-L-6-v2` (fast, accurate)
-- Optional: enable/disable via config or CLI flags
-- Batch inference for efficiency
+2. **Qwen Reranker** (powerful, 0.6B params, pairwise)
+   - Model: `Qwen/Qwen3-Reranker-0.6B`
+   - Best for: Semantic understanding, customizable instructions
+   - Latency: ~800-1200ms for 50 docs (FP16 optimized)
+   - Limitation: Pairwise scoring, can't compare years across documents
+
+3. **Jina Reranker** (SOTA, 0.6B params, listwise)
+   - Model: `jinaai/jina-reranker-v3`
+   - Best for: Canonical queries, year-based ranking, multilingual
+   - Latency: ~200-400ms for 50 docs
+   - **Key advantage**: Listwise reranking - sees all documents at once, can compare years for "original" queries
+
+### Multi-Stage Retrieval Pipeline
+1. **Filter extraction (optional)**: LLM extracts year/citation constraints from query
+2. **Query rewriting (optional)**: Generate diverse query variants with Qwen LLM
+3. **Hybrid search**: Milvus RRF fusion of dense (SPECTER) + sparse (SPLADE) with filters
+4. **Reranking**: Refine top candidates with cross-encoder/Qwen/Jina
+5. **Citation boost (optional)**: Apply citation score adjustment to final results
+
+### Metadata-Enhanced Embeddings
+Documents encoded with full context for better retrieval:
+```
+Title: U-Net: Convolutional Networks for Biomedical Image Segmentation
+
+Authors: Olaf Ronneberger, Philipp Fischer, Thomas Brox
+
+Year: 2015
+
+Categories: cs.CV
+
+Abstract: [full abstract text...]
+```
+
+This enables:
+- Exact title matching in dense/sparse search
+- Author name queries
+- Temporal context for rerankers (especially Jina's listwise comparison)
 
 ### Scalability
 - **Streaming data loader**: Handles large JSONL files without loading all into memory
 - **Batch processing**: Configurable batch sizes for encoding
-- **Memory-efficient sparse storage**: CSR format for SPLADE vectors
-- **FAISS optimization**: Fast similarity search for 300k+ documents
-- **Checkpoint support**: Resume interrupted indexing (framework in place)
-
-### Modular Design
-- Abstract base classes for easy extension
-- Pluggable encoders, indexers, and searchers
-- YAML + CLI configuration
-- Type-annotated for IDE support
+- **Milvus distributed**: Can scale to billions of vectors (cluster mode)
+- **Memory-efficient**: Sparse inverted index, IVF clustering for dense vectors
+- **GPU acceleration**: CUDA support for all encoders and rerankers
 
 ## Performance Notes (300k corpus on RTX 4070 Super)
 
-### Dense Encoding (SPECTER)
-- ~1-2 min for 1k docs
-- ~30-60 min for 300k docs
-- GPU memory: ~4-6 GB
-- Batch size 16 recommended
-
-### Sparse Encoding (SPLADE)
-- ~2-3 min for 1k docs  
-- ~60-120 min for 300k docs
-- GPU memory: ~6-8 GB
-- Memory: ~2-4 GB RAM for sparse matrix construction
+### Encoding Time
+- **Dense (SPECTER)**: ~30-60 min for 300k docs (batch_size=16, GPU)
+- **Sparse (SPLADE)**: ~60-120 min for 300k docs (batch_size=4, GPU)
+- **Total encoding**: ~90-180 min for full hybrid index
+- **GPU memory**: ~6-8 GB peak
 
 ### Query Latency
-- Dense: ~50-100ms
-- Sparse: ~100-200ms
-- Hybrid (RRF only): ~200-400ms
-- Hybrid + Reranking (100 candidates): ~400-700ms
-  - Cross-encoder adds ~200-300ms for batch scoring
-- Hybrid + Query Rewriting (2 rewrites): ~600-900ms
-  - Qwen inference adds ~200-400ms (FP16, GPU)
-  - Multi-query retrieval adds ~100-200ms
+| Configuration | Latency (ms) | Use Case |
+|--------------|--------------|----------|
+| Hybrid (RRF only) | 100-200 | Fast exploration |
+| + Cross-Encoder | 300-500 | General queries |
+| + Qwen Reranker | 800-1200 | Semantic understanding |
+| + Jina Reranker | 300-500 | Canonical queries |
+| + Query Rewriting | +200-400 | Robustness boost |
+| + Filters | -50-100 | Narrows search space |
+
+### Milvus Performance
+- **Collection size**: ~5-8 GB for 300k papers (vectors + metadata)
+- **Index build**: ~2-5 min for 300k docs
+- **Search latency**: ~50-100ms for hybrid search without reranking
+- **Scalability**: Tested up to 300k docs, supports 10M+ with HNSW index
 
 ## Advanced Usage
 
-### Query Rewriting Options
+### Query Rewriting with Filters
 
 ```powershell
-# Enable query rewriting with default settings (2 rewrites)
-python scripts/query.py --method hybrid --rewrite-query
+# Enable query rewriting with filter extraction
+python scripts/query.py --rewrite-query
 
-# Generate more query variants for better coverage
-python scripts/query.py --method hybrid --rewrite-query --num-rewrites 4
+# Example: "original unet paper"
+# → Extracts filters: year <= 2016, citation_count >= 1000
+# → Rewrites: "seminal U-Net segmentation architecture"
+# → Searches with filters applied to Milvus
 
-# Query rewriting with reranking disabled (faster)
-python scripts/query.py --method hybrid --rewrite-query --no-rerank
+# Disable citation filters (if no citation data in Milvus)
+# Edit config.yaml: enable_citation_filters: false
 
-# Single-query mode with rewriting
-python scripts/query.py --method hybrid --rewrite-query \
-  --query "attention mechanism for transformers" \
-  --top-k 10
+# Override filter confidence threshold
+# Edit config.yaml: filter_confidence_threshold: 0.8
 ```
 
-### Custom Config File
+### Reranker Selection
 
+```yaml
+# In config.yaml
+
+# Option 1: Cross-Encoder (fastest, general purpose)
+reranker:
+  type: cross-encoder
+  model: cross-encoder/ms-marco-MiniLM-L-12-v2
+  batch_size: 32
+
+# Option 2: Qwen (powerful semantic understanding)
+reranker:
+  type: qwen
+  model: Qwen/Qwen3-Reranker-0.6B
+  batch_size: 8  # Lower due to long sequences
+  instruction: null  # Custom instruction or null for default
+
+# Option 3: Jina (best for canonical queries, listwise)
+reranker:
+  type: jina
+  model: jinaai/jina-reranker-v3
+  batch_size: 50  # MUST match rerank_top_k for listwise comparison!
+```
+
+### Custom Metadata Template
+
+```yaml
+# In config.yaml
+data:
+  use_metadata: true
+  metadata_template: 'Title: {title}\n\nAuthors: {authors}\n\nYear: {year}\n\nCategories: {categories}\n\nAbstract: {abstract}'
+```
+
+After changing template, re-encode documents:
 ```powershell
-python scripts/encode.py --config my_custom_config.yaml --method both
+python scripts/encode.py --data-file data/arxiv_300k.jsonl
 ```
-
-### Override Data Keys
-
-```powershell
-python scripts/encode.py --method dense \
-  --data-file data/custom.jsonl \
-  --text-key "content" \
-  --id-key "paper_id"
-```
-
-### Non-Interactive Query
-
-```powershell
-python scripts/query.py --method hybrid \
-  --query "transformer attention mechanisms" \
-  --top-k 20 \
-  --rerank
-
-# Disable reranking for faster queries
-python scripts/query.py --method dense \
-  --query "neural networks" \
-  --no-rerank
-```
-
-## Incremental Indexing (Future)
-
-The indexer framework supports incremental updates. To add new documents:
-
-```python
-# Load existing index
-indexer = DenseIndexer(encoder, "data/dense_index")
-indexer.load()
-
-# Add new documents
-new_docs = [Document(id="...", text="..."), ...]
-indexer.add_documents(new_docs)
-
-# Save updated index
-indexer.save()
-```
-
-*Note: Full incremental CLI support coming soon.*
 
 ## Troubleshooting
 
-### Import errors
-Ensure you're running from the repo root and the conda environment is activated:
+### Milvus Connection Issues
+
 ```powershell
-conda activate a4-precision
-python scripts/encode.py --method dense
+# Check if Milvus is running
+docker-compose ps
+
+# Check Milvus health
+curl http://localhost:9091/healthz
+
+# View Milvus logs
+docker-compose logs -f milvus
+
+# Restart Milvus
+docker-compose restart
+
+# Fresh start (removes all data)
+docker-compose down -v
+docker-compose up -d
 ```
 
-### CUDA out of memory
-Reduce batch size:
+### Collection Not Found
+
 ```powershell
-python scripts/encode.py --method sparse --batch-size 8
+# Run encoding first to create collection
+python scripts/encode.py --data-file data/arxiv_1k.jsonl
+
+# Or check if collection exists
+# In Python:
+from pymilvus import connections, utility
+connections.connect(host='localhost', port='19530')
+print(utility.list_collections())
 ```
 
-### Missing index files
-Run encoding first:
+### Import Errors
+
+Ensure you're running from repo root and conda env is active:
 ```powershell
-python scripts/encode.py --method both
+conda activate arxplorer-env
+cd "C:\Users\Kyle Vavasour\Desktop\CSC490-3"
+python scripts/query.py
 ```
 
-### Slow queries
-- For dense: Use GPU FAISS (`use_gpu_faiss: true` in config)
-- For sparse: Ensure index is in CSR format (automatic on save)
-- For hybrid: Reduce `retrieval_k` (default 100)
-- For reranking: Reduce `rerank_top_k` or disable with `--no-rerank`
+### CUDA Out of Memory
+
+Reduce batch sizes in `config.yaml`:
+```yaml
+index:
+  batch_size: 8  # Reduce from 16
+  sparse_encoder_batch_size: 2  # Reduce from 4
+
+reranker:
+  batch_size: 4  # Reduce from 8 (Qwen) or 16 (others)
+```
+
+### Slow Queries
+
+**Optimization strategies**:
+1. Reduce `rerank_top_k` from 50 to 30
+2. Disable reranking: `--no-rerank`
+3. Use Cross-Encoder instead of Qwen for speed
+4. Enable query rewriting only when needed
+5. For >1M docs: Switch to HNSW index in `config.yaml`
+
+### Missing Dependencies
+
+```powershell
+# Reinstall environment
+conda env remove -n arxplorer-env
+conda env create -f environment.yml -n arxplorer-env
+conda activate arxplorer-env
+
+# For SPECTER2 support
+pip uninstall peft -y
+pip install transformers==4.38.2 adapters
+```
 
 ## Data Format
 
-Input JSONL format:
+Input JSONL format (one JSON object per line):
 ```json
-{"id": "arxiv:1234", "title": "...", "abstract": "...", "authors": [...]}
-{"id": "arxiv:5678", "title": "...", "abstract": "...", "authors": [...]}
+{"id": "arxiv:2004.07180", "title": "SPECTER: Document-level Representation Learning...", "abstract": "...", "authors": ["Arman Cohan", "..."], "categories": ["cs.CL"], "published_date": "2020-04-15"}
+{"id": "arxiv:1706.03762", "title": "Attention Is All You Need", "abstract": "...", "authors": ["Ashish Vaswani", "..."], "categories": ["cs.CL", "cs.LG"], "published_date": "2017-06-12"}
 ```
 
 Required fields (configurable via `config.yaml`):
 - `id`: Document identifier
 - `abstract` (or custom `text_key`): Text to encode
+- `title`: Paper title
+- `published_date`: Publication date (year extracted automatically)
+
+Optional fields:
+- `authors`: List of author names
+- `categories`: List of categories (e.g., cs.AI, cs.CV)
+
+## Milvus Schema
+
+The Milvus collection stores:
+- `id` (VARCHAR): Document ID
+- `title` (VARCHAR): Paper title  
+- `abstract` (VARCHAR): Paper abstract (truncated to 8192 chars)
+- `authors` (ARRAY): List of author names
+- `categories` (ARRAY): List of categories
+- `year` (INT64): Publication year
+- `citation_count` (INT64): Citation count (default 0)
+- `dense_vector` (FLOAT_VECTOR): SPECTER embedding (768D)
+- `sparse_vector` (SPARSE_FLOAT_VECTOR): SPLADE embedding (~30k dims, sparse)
+
+Indexes:
+- Dense: IVF_FLAT (nlist=1024) for ~300k docs, HNSW for >1M docs
+- Sparse: SPARSE_INVERTED_INDEX (memory-efficient)
+
+## Backup and Restore
+
+**Backup Milvus data**:
+```powershell
+# Using Milvus Backup tool (requires separate installation)
+# See: https://milvus.io/docs/milvus_backup_overview.md
+
+# Or backup Docker volumes
+docker-compose down
+docker run --rm -v milvus-standalone:/data -v $(pwd)/backups:/backup ubuntu tar czf /backup/milvus-backup.tar.gz /data
+```
+
+**Restore from backup**:
+```powershell
+docker run --rm -v milvus-standalone:/data -v $(pwd)/backups:/backup ubuntu tar xzf /backup/milvus-backup.tar.gz -C /
+docker-compose up -d
+```
 
 ## References
 
-- **SPECTER**: [Cohan et al., 2020](https://arxiv.org/abs/2004.07180)
-- **SPLADE**: [Formal et al., 2021](https://arxiv.org/abs/2107.05720)
-- **RRF**: Cormack et al., 2009 - "Reciprocal Rank Fusion"
-- **MS MARCO Cross-Encoders**: [Bajaj et al., 2018](https://arxiv.org/abs/1611.09268)
-- **Qwen 3** [Qwen Team, 2025](https://arxiv.org/abs/2505.09388) 
+- **Milvus**: [milvus.io](https://milvus.io/) - Open-source vector database
+- **SPECTER**: [Cohan et al., 2020](https://arxiv.org/abs/2004.07180) - Document-level embeddings
+- **SPECTER2**: [Singh et al., 2022](https://arxiv.org/abs/2209.07930) - Adapters for specialized embeddings
+- **SPLADE**: [Formal et al., 2021](https://arxiv.org/abs/2107.05720) - Sparse lexical and expansion model
+- **RRF**: Cormack et al., 2009 - Reciprocal Rank Fusion
+- **Qwen 3**: [Qwen Team, 2025](https://arxiv.org/abs/2505.09388) - Multilingual LLM family
+- **Jina Reranker v3**: [Wang et al., 2025](https://arxiv.org/abs/2509.25085) - Listwise document reranker 

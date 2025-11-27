@@ -14,6 +14,10 @@ class SearchResult:
     dense_score: Optional[float] = None
     sparse_score: Optional[float] = None
     cross_encoder_score: Optional[float] = None
+    citation_score: Optional[float] = None
+    citation_count: Optional[int] = None  # Raw citation count for display
+    publication_year: Optional[int] = None  # Publication year for canonical ranking
+    year_score: Optional[float] = None  # Computed year score for canonical mode
 
 
 class BaseSearcher(ABC):
