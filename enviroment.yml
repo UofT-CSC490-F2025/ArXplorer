@@ -33,3 +33,6 @@ dependencies:
       - tokenizers
       - pyserini
       - pymilvus>=2.4.0
+      - pytest
+      - pytest-cov
+      - coverage-badge
