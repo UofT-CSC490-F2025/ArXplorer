@@ -26,7 +26,8 @@ jobs:
           activate-environment: arxplorer-env
           environment-file: enviroment.yml
           python-version: "3.10"
-          miniforge-variant: Mambaforge
+          miniforge-variant: Miniforge3
+          miniforge-version: latest
           use-mamba: true
 
       - name: Run tests with coverage
