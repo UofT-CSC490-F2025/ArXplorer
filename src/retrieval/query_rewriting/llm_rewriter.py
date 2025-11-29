@@ -64,6 +64,22 @@ def build_milvus_filter_expr(filters: Dict, enable_citation_filters: bool = True
     return " and ".join(conditions)
 
 
+# ---------------------------------------------------------------------------
+# Part 3 coverage notes (see tests/test_query_rewriting.py):
+#   1. test_llm_rewriter_parses_canonical_json – happy-path canonical JSON.
+#   2. test_llm_rewriter_falls_back_to_pattern_detection – JSON parse failure.
+#   3. test_llm_rewriter_defaults_to_cpu – device auto-detection branch.
+#   4. test_build_prompt_without_chat_template / test_build_prompt_canonical_no_chat_template –
+#      prompt fallback when tokenizer lacks chat templates.
+#   5. test_rewrite_uses_default_num_rewrites – num_rewrites clamp/padding.
+#   6. test_rewrite_empty_generated_text_defaults_to_query – empty decode fallback.
+#   7. test_rewrite_causal_lm_without_canonical – legacy non-canonical mode.
+#   8. test_extract_filters_and_rewrite_success / failure / invalid_structure /
+#      seq2seq_mode – filter parsing success/fallback branches.
+#   9. test_extract_filters_no_chat_template – filter prompt fallback branch.
+#  10. test_detect_canonical_fallback_false – pattern matcher negative case.
+# These edge-case tests ensure both positive and negative flows are exercised.
+# ---------------------------------------------------------------------------
 class LLMQueryRewriter(BaseQueryRewriter):
     """Query rewriter using local LLM for query expansion."""
     
