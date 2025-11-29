@@ -1,0 +1,38 @@
+"""Base abstract class for searchers."""
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import List, Optional
+
+
+@dataclass
+class SearchResult:
+    """Represents a single search result."""
+    doc_id: str
+    score: float
+    rank: int = 0
+    dense_score: Optional[float] = None
+    sparse_score: Optional[float] = None
+    cross_encoder_score: Optional[float] = None
+    citation_score: Optional[float] = None
+    citation_count: Optional[int] = None  # Raw citation count for display
+    publication_year: Optional[int] = None  # Publication year for canonical ranking
+    year_score: Optional[float] = None  # Computed year score for canonical mode
+
+
+class BaseSearcher(ABC):
+    """Abstract base class for search implementations."""
+    
+    @abstractmethod
+    def search(self, query: str, top_k: int = 10) -> List[SearchResult]:
+        """
+        Search for documents matching the query.
+        
+        Args:
+            query: Query text
+            top_k: Number of results to return
+            
+        Returns:
+            List of SearchResult objects sorted by score (descending)
+        """
+        pass

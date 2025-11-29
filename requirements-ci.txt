@@ -1,0 +1,13 @@
+numpy
+scipy
+transformers>=4.40.0
+sentence-transformers==5.1.2
+datasets
+accelerate
+sentencepiece
+huggingface_hub
+tokenizers
+pymilvus>=2.4.0
+pytest
+pytest-cov
+coverage-badge
