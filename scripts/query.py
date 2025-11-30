@@ -25,7 +25,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.config import Config
 from src.retrieval.encoders import DenseEncoder, SparseEncoder
 from src.retrieval.searchers import MilvusHybridSearcher, SearchResult
-from src.retrieval.query_rewriting import LLMQueryRewriter, build_milvus_filter_expr
+from src.retrieval.query_rewriting import LLMQueryRewriter
+from src.retrieval.rerankers.intent_booster import IntentBooster
+from src.retrieval.rerankers.title_author_matcher import TitleAuthorMatcher
 
 
 def parse_args():
@@ -143,23 +145,7 @@ def setup_reranker(config: Config, searcher: MilvusHybridSearcher):
     """Initialize reranker based on config type."""
     reranker_type = config.reranker.type.lower()
     
-    if reranker_type == "qwen":
-        from src.retrieval.rerankers import QwenReranker
-        print(f"Loading Qwen reranker: {config.reranker.model}...")
-        
-        # Get all doc_ids from Milvus to build doc_texts mapping
-        # We'll fetch texts on-demand during reranking
-        doc_texts = {}
-        
-        reranker = QwenReranker(
-            doc_texts=doc_texts,
-            model_name=config.reranker.model,
-            device=config.encoder.device,
-            max_length=config.reranker.max_length,
-            batch_size=config.reranker.batch_size,
-            instruction=config.reranker.instruction
-        )
-    elif reranker_type == "jina":
+    if reranker_type == "jina":
         from src.retrieval.rerankers import JinaReranker
         print(f"Loading Jina reranker: {config.reranker.model}...")
         
@@ -191,14 +177,276 @@ def setup_reranker(config: Config, searcher: MilvusHybridSearcher):
     return reranker
 
 
-def print_results(results: List[SearchResult], reranked: bool = False, citation_boosted: bool = False):
+def execute_query_pipeline(
+    query: str,
+    searcher: MilvusHybridSearcher,
+    config: Config,
+    reranker=None,
+    query_rewriter=None,
+    intent_booster=None,
+    title_author_matcher=None
+) -> List[SearchResult]:
+    """
+    Execute full query pipeline with structured query analysis.
+    
+    Pipeline:
+    1. LLM: Extract intent, filters, target_title, target_authors, and generate rewrites
+    2. Search: Multi-query hybrid search with varied filters + unfiltered fallback
+    3. Intent boosting: Apply citation/date boosts based on intent
+    4. Title/Author matching: Boost papers with matching titles/authors (specific_paper/foundational only)
+    5. Reranking: Cross-encoder reranking (Jina listwise)
+    6. Final fusion: Combine boosted scores + reranker scores (0.7 + 0.3)
+    
+    Args:
+        query: User query string
+        searcher: MilvusHybridSearcher instance
+        config: Configuration object
+        reranker: Optional reranker (Jina/Qwen/CrossEncoder)
+        query_rewriter: Optional LLM rewriter
+        intent_booster: Optional IntentBooster for post-RRF boosting
+        title_author_matcher: Optional TitleAuthorMatcher for fuzzy matching
+        
+    Returns:
+        Final ranked results
+    """
+    from datetime import datetime
+    
+    original_query = query
+    intent = 'default'
+    year_constraint = None
+    citation_threshold = None
+    target_title = None
+    target_authors = None
+    rewrites = []
+    
+    # Step 1: LLM structured query analysis
+    if query_rewriter:
+        print("Analyzing query with LLM...")
+        result = query_rewriter.extract_intent_filters_and_rewrite(
+            original_query,
+            num_rewrites=config.query_rewriting.num_rewrites,
+            current_year=datetime.now().year
+        )
+        
+        intent = result.get('intent', 'default')
+        year_constraint = result.get('year_constraint')
+        citation_threshold = result.get('citation_threshold')
+        target_title = result.get('target_title')
+        target_authors = result.get('target_authors')
+        rewrites = result.get('rewrites', [])
+        
+        # Display extracted information
+        print(f"  Intent: {intent}")
+        
+        # Display target title/authors if extracted
+        if target_title:
+            print(f"  Target Title: {target_title}")
+        if target_authors:
+            print(f"  Target Authors: {', '.join(target_authors)}")
+        
+        filter_parts = []
+        if year_constraint:
+            year_min = year_constraint.get('min')
+            year_max = year_constraint.get('max')
+            if year_min and year_max:
+                if year_min == year_max:
+                    filter_parts.append(f"Year: {year_min}")
+                else:
+                    filter_parts.append(f"Year: {year_min}-{year_max}")
+            elif year_min:
+                filter_parts.append(f"Year: ≥{year_min}")
+            elif year_max:
+                filter_parts.append(f"Year: ≤{year_max}")
+        
+        if citation_threshold:
+            filter_parts.append(f"Citations: ≥{citation_threshold}")
+        
+        if filter_parts:
+            print(f"  Filters: {', '.join(filter_parts)}")
+        else:
+            print(f"  Filters: None")
+        
+        if rewrites:
+            print(f"  Rewrites: {len(rewrites)} variants generated")
+            for i, rewrite in enumerate(rewrites[:2], 1):  # Show first 2
+                if rewrite != original_query:
+                    print(f"    {i}. {rewrite[:80]}...")
+    
+    # Step 2: Multi-query hybrid search with varied filters
+    print(f"\nSearching Milvus (retrieval_k={config.search.retrieval_k})...")
+    
+    # Add target_title and target_authors as additional search queries if extracted
+    additional_queries = []
+    if target_title:
+        additional_queries.append(target_title)
+        print(f"  Added target_title as search query: {target_title[:60]}...")
+    if target_authors:
+        # Join authors into a single query string
+        authors_query = " ".join(target_authors)
+        additional_queries.append(authors_query)
+        print(f"  Added target_authors as search query: {authors_query[:60]}...")
+    
+    # Combine rewrites with additional queries
+    all_rewrites = rewrites + additional_queries
+    
+    results = searcher.search_multi_query_with_filters(
+        original_query=original_query,
+        rewrites=all_rewrites,
+        year_constraint=year_constraint,
+        citation_threshold=citation_threshold,
+        top_k=config.search.retrieval_k,  # Retrieve more for reranking
+        retrieval_k=config.search.retrieval_k
+    )
+    
+    print(f"  Retrieved: {len(results)} results")
+    
+    if not results:
+        print("  No results found.")
+        return []
+    
+    # Step 3: Intent-based boosting (post-RRF)
+    if intent_booster:
+        print(f"\nApplying intent-based boosting (intent={intent})...")
+        results = intent_booster.boost(results, intent)
+        print(f"  Boosted scores computed")
+        
+        # Show boost summary for top results
+        if len(results) >= 3:
+            print(f"\n  Top 3 after boosting:")
+            for i, r in enumerate(results[:3], 1):
+                bc = r.boost_components if hasattr(r, 'boost_components') else {}
+                print(f"    {i}. {r.doc_id[:30]} | Score: {r.score:.4f} | Citations: {r.citation_count}")
+    
+    # Step 4: Title/Author fuzzy matching (specific_paper and foundational intents only)
+    if title_author_matcher and (target_title or target_authors):
+        # Only apply for specific_paper and foundational intents
+        if intent in ['specific_paper', 'foundational']:
+            print(f"\nApplying title/author fuzzy matching...")
+            
+            # Match on all results from hybrid search
+            results = title_author_matcher.match_and_boost(
+                results=results,
+                target_title=target_title,
+                target_authors=target_authors
+            )
+            
+            print(f"  Matching boost applied to {len(results)} candidates")
+            
+            # Show papers with matches
+            matched_papers = [r for r in results if hasattr(r, 'boost_components') and 
+                            (r.boost_components.get('title_match') or r.boost_components.get('author_match'))]
+            
+            if matched_papers:
+                print(f"\n  Papers with title/author matches:")
+                for i, r in enumerate(matched_papers[:3], 1):
+                    bc = r.boost_components
+                    match_info = []
+                    if bc.get('title_match'):
+                        match_info.append(f"Title: {bc.get('title_score', 0):.2f}")
+                    if bc.get('author_match'):
+                        match_info.append(f"Author: {bc.get('author_score', 0):.2f}")
+                    print(f"    {i}. {r.doc_id[:30]} | Boost: +{bc.get('match_boost', 0):.2f} | {', '.join(match_info)}")
+    
+    # Step 4b: Apply title/author matching to original query (fallback if LLM didn't extract)
+    # This catches cases where user query directly contains title/author info
+    if title_author_matcher:
+        # Only match against original query if we're in specific_paper/foundational intent
+        # AND if LLM didn't already extract title/authors (to avoid double-boosting)
+        if not target_title and not target_authors:
+            print(f"\nApplying title/author matching to original query...")
+            
+            # Match using the original query as target
+            results = title_author_matcher.match_and_boost(
+                results=results,
+                target_title=original_query,  # Use query as title target
+                target_authors=None  # Don't try to extract authors from query string
+            )
+            
+            print(f"  Query-based matching applied to {len(results)} candidates")
+            
+            # Show papers with matches
+            matched_papers = [r for r in results if hasattr(r, 'boost_components') and 
+                            (r.boost_components.get('title_match') or r.boost_components.get('author_match'))]
+            
+            if matched_papers:
+                print(f"\n  Papers matching original query:")
+                for i, r in enumerate(matched_papers[:3], 1):
+                    bc = r.boost_components
+                    match_info = []
+                    if bc.get('title_match'):
+                        match_info.append(f"Title: {bc.get('title_score', 0):.2f}")
+                    if bc.get('author_match'):
+                        match_info.append(f"Author: {bc.get('author_score', 0):.2f}")
+                    print(f"    {i}. {r.doc_id[:30]} | Boost: +{bc.get('match_boost', 0):.2f} | {', '.join(match_info)}")
+    
+    # Step 5: Cross-encoder reranking
+    reranked = False
+    if reranker and len(results) > 0:
+        # Take top rerank_top_k for reranking
+        candidates = results[:config.reranker.rerank_top_k]
+        
+        print(f"\nReranking with {config.reranker.type} (top {len(candidates)})...")
+        
+        # Build doc_texts from abstracts
+        doc_texts = {r.doc_id: r.abstract[:512] if hasattr(r, 'abstract') else '' for r in candidates}
+        reranker.doc_texts = doc_texts
+        
+        # Rerank
+        reranked_results = reranker.rerank(original_query, candidates, top_k=len(candidates))
+        reranked = True
+        
+        # Step 6: Final score fusion (0.7 boosted + 0.3 reranker)
+        print(f"\nFusing scores ({config.reranker.pre_rerank_weight:.1f} boosted + {config.reranker.rerank_weight:.1f} reranker)...")
+        
+        # Normalize reranker scores to [0, 1]
+        reranker_scores = [r.cross_encoder_score for r in reranked_results if r.cross_encoder_score is not None]
+        if reranker_scores:
+            min_rerank = min(reranker_scores)
+            max_rerank = max(reranker_scores)
+            rerank_range = max_rerank - min_rerank if max_rerank > min_rerank else 1.0
+        else:
+            min_rerank = 0.0
+            rerank_range = 1.0
+        
+        # Normalize boosted scores to [0, 1]
+        boosted_scores = [r.score for r in reranked_results]
+        min_boost = min(boosted_scores)
+        max_boost = max(boosted_scores)
+        boost_range = max_boost - min_boost if max_boost > min_boost else 1.0
+        
+        # Fuse scores
+        for result in reranked_results:
+            # Normalize scores
+            norm_boost = (result.score - min_boost) / boost_range
+            norm_rerank = (result.cross_encoder_score - min_rerank) / rerank_range if result.cross_encoder_score is not None else 0.0
+            
+            # Weighted fusion
+            result.score = (
+                config.reranker.pre_rerank_weight * norm_boost +
+                config.reranker.rerank_weight * norm_rerank
+            )
+        
+        # Re-sort by fused scores
+        reranked_results.sort(key=lambda r: r.score, reverse=True)
+        
+        # Update ranks
+        for rank, result in enumerate(reranked_results, 1):
+            result.rank = rank
+        
+        results = reranked_results
+    
+    # Return top_k final results
+    return results[:config.search.top_k], intent
+
+
+def print_results(results: List[SearchResult], reranked: bool = False, intent: str = None):
     """Print search results in a formatted way."""
     print(f"\n{'='*70}")
-    print(f"MILVUS HYBRID SEARCH RESULTS")
+    print(f"FINAL RESULTS")
     if reranked:
-        print("(with reranking)")
-    if citation_boosted:
-        print("(with citation boost)")
+        print("(with intent boosting + reranking + fusion)")
+    if intent:
+        print(f"Intent: {intent}")
     print(f"{'='*70}")
     
     if not results:
@@ -218,73 +466,26 @@ def print_results(results: List[SearchResult], reranked: bool = False, citation_
         if hasattr(result, 'citation_count') and result.citation_count is not None:
             print(f"  Citations: {result.citation_count}")
         
+        # Show component scores if available
+        if hasattr(result, 'boost_components'):
+            bc = result.boost_components
+            print(f"  Boosting: Base RRF={bc.get('base_rrf', 0):.4f}, Cite={bc.get('citation_boost', 0):.4f}, Date={bc.get('date_boost', 0):.4f}")
+        
         # Show reranker score if available
         if reranked and result.cross_encoder_score is not None:
-            print(f"  Reranker Score: {result.cross_encoder_score:.4f}")
+            print(f"  Reranker: {result.cross_encoder_score:.4f}")
     
     print(f"\n{'='*70}\n")
 
 
-def apply_citation_boost(results: List[SearchResult], citation_boost_weight: float = 0.1) -> List[SearchResult]:
-    """Apply simple citation boost to reranked results.
-    
-    Formula: final_score = rerank_score + citation_boost_weight * log(citations + 1)
-    
-    Args:
-        results: Reranked search results
-        citation_boost_weight: Weight for citation boost (default 0.1)
-        
-    Returns:
-        Results with citation-boosted scores, re-sorted and re-ranked
-    """
-    import math
-    
-    boosted_results = []
-    for result in results:
-        citation_count = result.citation_count if hasattr(result, 'citation_count') and result.citation_count is not None else 0
-        citation_boost = citation_boost_weight * math.log10(citation_count + 1)
-        
-        # Create new result with boosted score
-        boosted_result = SearchResult(
-            doc_id=result.doc_id,
-            score=result.score + citation_boost,  # Add boost to reranker score
-            rank=0,  # Will be updated after sorting
-            dense_score=result.dense_score,
-            sparse_score=result.sparse_score,
-            cross_encoder_score=result.cross_encoder_score,  # Preserve original reranker score
-            citation_count=citation_count,
-            publication_year=result.publication_year if hasattr(result, 'publication_year') else None
-        )
-        
-        # Copy metadata attributes
-        if hasattr(result, 'title'):
-            boosted_result.title = result.title
-        if hasattr(result, 'abstract'):
-            boosted_result.abstract = result.abstract
-        if hasattr(result, 'authors'):
-            boosted_result.authors = result.authors
-        if hasattr(result, 'categories'):
-            boosted_result.categories = result.categories
-        
-        boosted_results.append(boosted_result)
-    
-    # Sort by boosted score and update ranks
-    boosted_results.sort(key=lambda x: x.score, reverse=True)
-    for rank, result in enumerate(boosted_results, 1):
-        result.rank = rank
-    
-    return boosted_results
-
-
-def interactive_mode(searcher: MilvusHybridSearcher, config: Config, reranker=None, query_rewriter=None):
+def interactive_mode(searcher: MilvusHybridSearcher, config: Config, reranker=None, query_rewriter=None, intent_booster=None, title_author_matcher=None):
     """Run interactive query loop."""
-    rerank_status = " with reranking" if reranker else ""
-    rewrite_status = ""
-    if query_rewriter:
-        num_rewrites = config.query_rewriting.num_rewrites
-        rewrite_status = f" with {num_rewrites} query rewrite(s)"
+    rerank_status = " + reranking" if reranker else ""
+    rewrite_status = " + LLM analysis" if query_rewriter else ""
+    boost_status = " + intent boosting" if intent_booster else ""
+    match_status = " + title/author matching" if title_author_matcher else ""
     
-    print(f"\nMilvus hybrid search ready{rerank_status}{rewrite_status}. Type your query (or 'exit' to quit).\n")
+    print(f"\nQuery pipeline ready{rewrite_status}{boost_status}{match_status}{rerank_status}. Type your query (or 'exit' to quit).\n")
     
     while True:
         try:
@@ -299,185 +500,52 @@ def interactive_mode(searcher: MilvusHybridSearcher, config: Config, reranker=No
         if query.lower() in ['exit', 'quit', 'q']:
             break
         
-        original_query = query
-        
-        # Extract filters and rewrite query if enabled
-        filter_expr = None
-        filter_info = None
-        
-        if query_rewriter:
-            from datetime import datetime
-            result = query_rewriter.extract_filters_and_rewrite(
-                original_query,
-                current_year=datetime.now().year
+        try:
+            results, intent = execute_query_pipeline(
+                query=query,
+                searcher=searcher,
+                config=config,
+                reranker=reranker,
+                query_rewriter=query_rewriter,
+                intent_booster=intent_booster,
+                title_author_matcher=title_author_matcher
             )
             
-            filters = result.get('filters', {})
-            confidence = result.get('confidence', 0.0)
-            rewrites = result.get('rewrites', [original_query])
+            print_results(results, reranked=(reranker is not None), intent=intent)
             
-            # Display filter info
-            if filters:
-                year_filter = filters.get('year', {})
-                citation_filter = filters.get('citation_count', {})
-                
-                filter_parts = []
-                if year_filter.get('min') or year_filter.get('max'):
-                    if year_filter.get('min') and year_filter.get('max'):
-                        if year_filter['min'] == year_filter['max']:
-                            filter_parts.append(f"Year: {year_filter['min']}")
-                        else:
-                            filter_parts.append(f"Year: {year_filter['min']}-{year_filter['max']}")
-                    elif year_filter.get('min'):
-                        filter_parts.append(f"Year: ≥{year_filter['min']}")
-                    else:
-                        filter_parts.append(f"Year: ≤{year_filter['max']}")
-                
-                if citation_filter.get('min'):
-                    filter_parts.append(f"Citations: ≥{citation_filter['min']}")
-                
-                if filter_parts:
-                    filter_info = f"🔍 Filters: {', '.join(filter_parts)} (confidence: {confidence:.2f})"
-                else:
-                    filter_info = "🔍 No filters applied"
-                
-                # Build filter expression if confidence is high enough
-                if confidence >= config.query_rewriting.filter_confidence_threshold:
-                    filter_expr = build_milvus_filter_expr(
-                        filters,
-                        enable_citation_filters=config.query_rewriting.enable_citation_filters,
-                        enable_year_filters=config.query_rewriting.enable_year_filters
-                    )
-            else:
-                filter_info = "🔍 No filters applied"
-            
-            # Display filter status
-            print(filter_info)
-            
-            # Display rewrites
-            if rewrites and rewrites[0] != original_query:
-                print(f"Rewritten query: {rewrites[0]}")
-        
-        # Search with Milvus with filter (use rewrites as query_variants if available)
-        retrieval_k = config.reranker.rerank_top_k if reranker else config.search.top_k
-        query_variants = rewrites[1:] if rewrites and len(rewrites) > 1 else None  # Skip first rewrite (already displayed)
-        results = searcher.search(original_query, top_k=retrieval_k, filter_expr=filter_expr, query_variants=query_variants)
-        
-        # Fallback: if filters are too restrictive, retry without them
-        if filter_expr and len(results) < 5:
-            print(f"⚠️  Only {len(results)} results with filters. Retrying without filters...")
-            results = searcher.search(original_query, top_k=retrieval_k, filter_expr=None, query_variants=query_variants)
-        
-        # Rerank if enabled
-        if reranker and results:
-            # Build doc_texts for reranker from abstract attribute
-            doc_texts = {r.doc_id: r.abstract[:512] if hasattr(r, 'abstract') else '' for r in results}
-            reranker.doc_texts = doc_texts
-            
-            # Rerank
-            results = reranker.rerank(original_query, results, top_k=config.search.top_k)
-            
-            # Apply citation boost
-            if config.reranker.citation_boost_weight > 0:
-                results = apply_citation_boost(results, config.reranker.citation_boost_weight)
-        
-        print_results(results, reranked=(reranker is not None), citation_boosted=(config.reranker.citation_boost_weight > 0 if reranker else False))
+        except Exception as e:
+            print(f"\nError executing query: {e}")
+            import traceback
+            traceback.print_exc()
 
 
-def single_query_mode(searcher: MilvusHybridSearcher, query: str, config: Config, reranker=None, query_rewriter=None):
+def single_query_mode(searcher: MilvusHybridSearcher, query: str, config: Config, reranker=None, query_rewriter=None, intent_booster=None, title_author_matcher=None):
     """Execute a single query and exit."""
-    rerank_status = " with reranking" if reranker else ""
-    rewrite_status = ""
-    if query_rewriter:
-        rewrite_status = " with filter extraction"
+    rerank_status = " + reranking" if reranker else ""
+    rewrite_status = " + LLM analysis" if query_rewriter else ""
+    boost_status = " + intent boosting" if intent_booster else ""
+    match_status = " + title/author matching" if title_author_matcher else ""
     
-    print(f"\nExecuting Milvus hybrid search{rerank_status}{rewrite_status} for: {query}\n")
+    print(f"\nExecuting query pipeline{rewrite_status}{boost_status}{match_status}{rerank_status}:\n  '{query}'\n")
     
-    original_query = query
-    
-    # Extract filters and rewrite query if enabled
-    filter_expr = None
-    filter_info = None
-
-    rewrites = None
-    
-    if query_rewriter:
-        from datetime import datetime
-        result = query_rewriter.extract_filters_and_rewrite(
-            original_query,
-            current_year=datetime.now().year
+    try:
+        results, intent = execute_query_pipeline(
+            query=query,
+            searcher=searcher,
+            config=config,
+            reranker=reranker,
+            query_rewriter=query_rewriter,
+            intent_booster=intent_booster,
+            title_author_matcher=title_author_matcher
         )
         
-        filters = result.get('filters', {})
-        confidence = result.get('confidence', 0.0)
-        rewrites = result.get('rewrites', [original_query])
+        print_results(results, reranked=(reranker is not None), intent=intent)
         
-        # Display filter info
-        if filters:
-            year_filter = filters.get('year', {})
-            citation_filter = filters.get('citation_count', {})
-            
-            filter_parts = []
-            if year_filter.get('min') or year_filter.get('max'):
-                if year_filter.get('min') and year_filter.get('max'):
-                    if year_filter['min'] == year_filter['max']:
-                        filter_parts.append(f"Year: {year_filter['min']}")
-                    else:
-                        filter_parts.append(f"Year: {year_filter['min']}-{year_filter['max']}")
-                elif year_filter.get('min'):
-                    filter_parts.append(f"Year: ≥{year_filter['min']}")
-                else:
-                    filter_parts.append(f"Year: ≤{year_filter['max']}")
-            
-            if citation_filter.get('min'):
-                filter_parts.append(f"Citations: ≥{citation_filter['min']}")
-            
-            if filter_parts:
-                filter_info = f"🔍 Filters: {', '.join(filter_parts)} (confidence: {confidence:.2f})"
-            else:
-                filter_info = "🔍 No filters applied"
-            
-            # Build filter expression if confidence is high enough
-            if confidence >= config.query_rewriting.filter_confidence_threshold:
-                filter_expr = build_milvus_filter_expr(
-                    filters,
-                    enable_citation_filters=config.query_rewriting.enable_citation_filters,
-                    enable_year_filters=config.query_rewriting.enable_year_filters
-                )
-        else:
-            filter_info = "🔍 No filters applied"
-        
-        # Display filter status
-        print(filter_info)
-        
-        # Display rewrites
-        if rewrites and rewrites[0] != original_query:
-            print(f"Rewritten query: {rewrites[0]}\n")
-    
-    # Search with Milvus with filter (use rewrites as query_variants if available)
-    retrieval_k = config.reranker.rerank_top_k if reranker else config.search.top_k
-    query_variants = rewrites[1:] if rewrites and len(rewrites) > 1 else None  # Skip first rewrite (already displayed)
-    results = searcher.search(original_query, top_k=retrieval_k, filter_expr=filter_expr, query_variants=query_variants)
-    
-    # Fallback: if filters are too restrictive, retry without them
-    if filter_expr and len(results) < 5:
-        print(f"⚠️  Only {len(results)} results with filters. Retrying without filters...\n")
-        results = searcher.search(original_query, top_k=retrieval_k, filter_expr=None, query_variants=query_variants)
-    
-    # Rerank if enabled
-    if reranker and results:
-        # Build doc_texts for reranker from abstract attribute
-        doc_texts = {r.doc_id: r.abstract[:512] if hasattr(r, 'abstract') else '' for r in results}
-        reranker.doc_texts = doc_texts
-        
-        # Rerank
-        results = reranker.rerank(original_query, results, top_k=config.search.top_k)
-        
-        # Apply citation boost
-        if config.reranker.citation_boost_weight > 0:
-            results = apply_citation_boost(results, config.reranker.citation_boost_weight)
-    
-    print_results(results, reranked=(reranker is not None), citation_boosted=(config.reranker.citation_boost_weight > 0 if reranker else False))
+    except Exception as e:
+        print(f"\nError executing query: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 
 def main():
@@ -522,34 +590,63 @@ def main():
     
     searcher = setup_milvus_searcher(config)
     
-    print("✓ Milvus searcher ready\n")
+    print("Milvus searcher ready\n")
     
     # Setup reranker if enabled
     reranker = None
     if config.reranker.enabled:
         reranker = setup_reranker(config, searcher)
-        print("✓ Reranker ready\n")
+        print("Reranker ready\n")
         if config.reranker.citation_boost_weight > 0:
             print(f"Citation boost enabled: weight={config.reranker.citation_boost_weight:.2f}\n")
     
     # Setup query rewriter if enabled
     query_rewriter = None
     if config.query_rewriting.enabled:
-        print("Loading query rewriting model...")
+        if config.query_rewriting.use_vllm:
+            print(f"Initializing vLLM query rewriter: {config.query_rewriting.vllm_endpoint}")
+        else:
+            print("Loading query rewriting model...")
+        
         query_rewriter = LLMQueryRewriter(
             model_name=config.query_rewriting.model,
             device=config.query_rewriting.device,
             max_length=config.query_rewriting.max_length,
             temperature=config.query_rewriting.temperature,
-            num_rewrites=config.query_rewriting.num_rewrites
+            num_rewrites=config.query_rewriting.num_rewrites,
+            use_vllm=config.query_rewriting.use_vllm,
+            vllm_endpoint=config.query_rewriting.vllm_endpoint,
+            vllm_timeout=config.query_rewriting.vllm_timeout
         )
-        print("✓ Query rewriter ready\n")
+        print("Query rewriter ready\n")
+    
+    # Setup intent booster if config exists and enabled
+    intent_booster = None
+    if hasattr(config, 'intent_boosting') and config.intent_boosting.enabled:
+        print("Initializing intent-based boosting...")
+        intent_booster = IntentBooster(
+            citation_weights=config.intent_boosting.citation_weights,
+            date_weights=config.intent_boosting.date_weights
+        )
+        print("Intent booster ready\n")
+    
+    # Setup title/author matcher if config exists and enabled
+    title_author_matcher = None
+    if hasattr(config, 'title_author_matching') and config.title_author_matching.enabled:
+        print("Initializing title/author fuzzy matching...")
+        title_author_matcher = TitleAuthorMatcher(
+            title_threshold=config.title_author_matching.title_threshold,
+            author_threshold=config.title_author_matching.author_threshold,
+            title_boost_weight=config.title_author_matching.title_boost_weight,
+            author_boost_weight=config.title_author_matching.author_boost_weight
+        )
+        print("Title/author matcher ready\n")
     
     # Run in appropriate mode
     if args.query:
-        single_query_mode(searcher, args.query, config, reranker, query_rewriter)
+        single_query_mode(searcher, args.query, config, reranker, query_rewriter, intent_booster, title_author_matcher)
     else:
-        interactive_mode(searcher, config, reranker, query_rewriter)
+        interactive_mode(searcher, config, reranker, query_rewriter, intent_booster, title_author_matcher)
 
 
 if __name__ == "__main__":

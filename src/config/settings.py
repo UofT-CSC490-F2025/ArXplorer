@@ -23,9 +23,6 @@ class EncoderConfig:
 class IndexConfig:
     """Configuration for indexing."""
     batch_size: int = 16
-    dense_output_dir: str = "data/dense_index"
-    sparse_output_dir: str = "data/sparse_index"
-    use_gpu_faiss: bool = False
     checkpoint_enabled: bool = True
     chunk_size: int = 10000  # Number of docs per chunk for sparse indexing
     sparse_encoder_batch_size: int = 4  # SPLADE encoder batch size (to manage VRAM)
@@ -35,23 +32,15 @@ class IndexConfig:
 class RerankerConfig:
     """Configuration for reranking."""
     enabled: bool = True
-    type: str = "cross-encoder"  # 'cross-encoder', 'qwen', or 'jina'
+    type: str = "cross-encoder"  # 'cross-encoder' or 'jina'
     model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     rerank_top_k: int = 100  # Number of candidates to rerank
     max_length: int = 512
     batch_size: int = 32
-    citation_boost_weight: float = 0.1  # Weight for citation boost (0 = disabled)
-    instruction: Optional[str] = None  # Custom instruction for reranker (Qwen/Jina only)
-
-
-@dataclass
-class CitationConfig:
-    """Configuration for citation metadata."""
-    enabled: bool = False  # Enable citation scoring
-    data_file: str = "data/citations.json"  # Citation data lookup
-    score_formula: str = "log"  # 'log' or 'log10'
-    normalize: bool = True  # Normalize to [0, 1]
-    missing_default: float = 0.0  # Default for papers without citations
+    instruction: Optional[str] = None  # Custom instruction for reranker (Jina only)
+    # Score fusion weights (for two-stage reranking)
+    pre_rerank_weight: float = 0.7  # Weight for pre-reranking scores (RRF + intent boosting)
+    rerank_weight: float = 0.3  # Weight for reranker scores (cross-encoder)
 
 
 @dataclass
@@ -63,6 +52,35 @@ class SearchConfig:
 
 
 @dataclass
+class IntentBoostingConfig:
+    """Configuration for intent-based boosting."""
+    enabled: bool = True
+    citation_weights: dict = field(default_factory=lambda: {
+        'topical': 0.1,
+        'sota': 0.2,
+        'foundational': 0.3,
+        'comparison': 0.1,
+        'method_lookup': 0.1,
+        'default': 0.1
+    })
+    date_weights: dict = field(default_factory=lambda: {
+        'sota': 0.1,  # Favor recent papers
+        'foundational': 0.1  # Favor older papers
+    })
+    min_year: int = 1990  # Minimum year in corpus for normalization
+
+
+@dataclass
+class TitleAuthorMatchingConfig:
+    """Configuration for title and author fuzzy matching."""
+    enabled: bool = True
+    title_threshold: float = 0.5  # Jaccard similarity threshold for title match (token-based)
+    author_threshold: float = 0.7  # Token overlap threshold for author match
+    title_boost_weight: float = 1.0  # Boost to add for title match
+    author_boost_weight: float = 1.0  # Boost to add for author match
+
+
+@dataclass
 class QueryRewritingConfig:
     """Configuration for LLM-based query rewriting and filter extraction."""
     enabled: bool = False
@@ -70,10 +88,14 @@ class QueryRewritingConfig:
     max_length: int = 128
     temperature: float = 0.3
     num_rewrites: int = 1  # Number of query rewrites to generate (1-5 recommended)
-    device: Optional[str] = None  # None = auto-detect
+    device: Optional[str] = None  # None = auto-detect (local mode only)
     filter_confidence_threshold: float = 0.7  # Minimum confidence to apply filters (0-1)
     enable_citation_filters: bool = False  # Enable citation_count filters (requires citation data)
     enable_year_filters: bool = True  # Enable year filters
+    # vLLM API settings
+    use_vllm: bool = False  # Use vLLM API instead of loading model locally
+    vllm_endpoint: str = "http://localhost:8000/v1"  # vLLM OpenAI-compatible endpoint
+    vllm_timeout: int = 30  # Timeout for vLLM API calls (seconds)
 
 
 @dataclass
@@ -115,10 +137,11 @@ class Config:
     index: IndexConfig = field(default_factory=IndexConfig)
     search: SearchConfig = field(default_factory=SearchConfig)
     reranker: RerankerConfig = field(default_factory=RerankerConfig)
-    citation: CitationConfig = field(default_factory=CitationConfig)
     query_rewriting: QueryRewritingConfig = field(default_factory=QueryRewritingConfig)
     data: DataConfig = field(default_factory=DataConfig)
     milvus: MilvusConfig = field(default_factory=MilvusConfig)
+    intent_boosting: IntentBoostingConfig = field(default_factory=IntentBoostingConfig)
+    title_author_matching: TitleAuthorMatchingConfig = field(default_factory=TitleAuthorMatchingConfig)
     
     @classmethod
     def from_yaml(cls, filepath: str) -> 'Config':
@@ -138,10 +161,11 @@ class Config:
             index=IndexConfig(**data.get('index', {})),
             search=SearchConfig(**data.get('search', {})),
             reranker=RerankerConfig(**data.get('reranker', {})),
-            citation=CitationConfig(**data.get('citation', {})),
             query_rewriting=QueryRewritingConfig(**data.get('query_rewriting', {})),
             data=DataConfig(**data.get('data', {})),
-            milvus=MilvusConfig(**data.get('milvus', {}))
+            milvus=MilvusConfig(**data.get('milvus', {})),
+            intent_boosting=IntentBoostingConfig(**data.get('intent_boosting', {})),
+            title_author_matching=TitleAuthorMatchingConfig(**data.get('title_author_matching', {}))
         )
     
     @classmethod
