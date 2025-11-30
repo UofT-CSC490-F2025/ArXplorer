@@ -139,11 +139,11 @@ class ArXplorerSearchSystem:
             
             # Step 3: Intent-based boosting
             if self.config.intent_boosting.enabled:
-                results = self.intent_booster.boost_scores(results, intent)
+                results = self.intent_booster.boost(results, intent)
             
             # Step 4: Title/author matching (for specific paper searches)
             if self.config.title_author_matching.enabled and (target_title or target_authors):
-                results = self.title_author_matcher.boost_scores(
+                results = self.title_author_matcher.match_and_boost(
                     results, target_title, target_authors
                 )
             
