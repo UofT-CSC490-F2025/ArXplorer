@@ -250,14 +250,25 @@ class MilvusIndexer(BaseIndexer):
             entities = []
             for j, doc in enumerate(batch_docs):
                 sparse_dict = {int(idx): float(val) for idx, val in zip(batch_sparse[j][0], batch_sparse[j][1])}
+                
+                # Get year from doc (use year field if set, otherwise published_year, default 0)
+                year_val = 0
+                if hasattr(doc, 'year') and doc.year:
+                    year_val = doc.year
+                elif doc.published_year:
+                    year_val = doc.published_year
+                
+                # Get citation_count from doc (default 0)
+                citation_val = getattr(doc, 'citation_count', 0) if hasattr(doc, 'citation_count') else 0
+                
                 entity = {
                     "id": doc.id,
                     "title": doc.title or "",
                     "abstract": doc.text[:8192],  # Truncate to max length
                     "authors": doc.authors if hasattr(doc, 'authors') else [],
                     "categories": doc.categories if hasattr(doc, 'categories') else [],
-                    "year": doc.published_year if doc.published_year else 0,
-                    "citation_count": 0,  # Placeholder, update separately
+                    "year": year_val,
+                    "citation_count": citation_val,
                     "dense_vector": batch_dense[j].tolist(),
                     "sparse_vector": sparse_dict,
                 }

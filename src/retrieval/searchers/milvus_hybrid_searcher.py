@@ -171,6 +171,152 @@ class MilvusHybridSearcher(BaseSearcher):
         
         return search_results
     
+    def search_multi_query_with_filters(
+        self,
+        original_query: str,
+        rewrites: List[str],
+        year_constraint: Optional[Dict[str, Optional[int]]] = None,
+        citation_threshold: Optional[int] = None,
+        top_k: int = 10,
+        retrieval_k: int = 1000
+    ) -> List[SearchResult]:
+        """
+        Multi-query search with varied filters plus unfiltered safety fallback.
+        
+        Strategy:
+        1. Original query WITH filters (if provided)
+        2. Original query WITHOUT filters (safety fallback)
+        3. Each rewrite WITH filters (varied across rewrites)
+        
+        All searches treated as separate "modalities" and fused with RRF.
+        
+        Args:
+            original_query: Original user query
+            rewrites: List of rewritten queries
+            year_constraint: Dict with 'min' and/or 'max' year
+            citation_threshold: Minimum citation count
+            top_k: Final number of results
+            retrieval_k: Retrieval pool size per search
+            
+        Returns:
+            List of SearchResult fused across all queries
+        """
+        # Build filter expression
+        filter_expr = self._build_filter_expr(year_constraint, citation_threshold)
+        
+        # Collect all queries with their filters
+        queries_and_filters = []
+        
+        # 1. Original query WITH filters (if any)
+        if filter_expr:
+            queries_and_filters.append((original_query, filter_expr))
+        
+        # 2. Original query WITHOUT filters (safety fallback)
+        queries_and_filters.append((original_query, None))
+        
+        # 3. Rewrites WITH varied filters
+        # Vary filters across rewrites: alternate full filter, partial filter, no filter
+        for i, rewrite in enumerate(rewrites):
+            if i % 3 == 0:
+                # Full filters
+                queries_and_filters.append((rewrite, filter_expr))
+            elif i % 3 == 1 and year_constraint:
+                # Year-only filter
+                year_only_expr = self._build_filter_expr(year_constraint, None)
+                queries_and_filters.append((rewrite, year_only_expr))
+            else:
+                # No filters for diversity
+                queries_and_filters.append((rewrite, None))
+        
+        # Encode all queries
+        all_queries = [q for q, _ in queries_and_filters]
+        dense_vecs = self.dense_encoder.encode(all_queries)
+        sparse_vecs = self.sparse_encoder.encode(all_queries, batch_size=1)
+        
+        # Convert sparse to Milvus format
+        sparse_dicts = []
+        for sparse_vec in sparse_vecs:
+            sparse_indices, sparse_values = sparse_vec
+            sparse_dict = {int(idx): float(val) for idx, val in zip(sparse_indices, sparse_values)}
+            sparse_dicts.append(sparse_dict)
+        
+        # Create search requests for each (query, filter) pair
+        search_requests = []
+        
+        for i, (_, filter_expr_i) in enumerate(queries_and_filters):
+            # Dense request
+            dense_request = AnnSearchRequest(
+                data=[dense_vecs[i].tolist()],
+                anns_field="dense_vector",
+                param={"metric_type": "IP", "params": {"nprobe": 64}},
+                limit=retrieval_k,
+                expr=filter_expr_i
+            )
+            search_requests.append(dense_request)
+            
+            # Sparse request
+            sparse_request = AnnSearchRequest(
+                data=[sparse_dicts[i]],
+                anns_field="sparse_vector",
+                param={"metric_type": "IP"},
+                limit=retrieval_k,
+                expr=filter_expr_i
+            )
+            search_requests.append(sparse_request)
+        
+        # Perform hybrid search with RRF fusion across ALL query variants and modalities
+        results = self.collection.hybrid_search(
+            reqs=search_requests,
+            rerank=RRFRanker(k=self.rrf_k),
+            limit=top_k,
+            output_fields=["id", "title", "abstract", "authors", "categories", "year", "citation_count"]
+        )
+        
+        # Convert to SearchResult
+        search_results = []
+        for rank, hit in enumerate(results[0], 1):
+            doc_id = hit.entity.get("id")
+            
+            result = SearchResult(
+                doc_id=doc_id,
+                score=hit.score,
+                rank=rank,
+                dense_score=None,
+                sparse_score=None,
+                citation_count=hit.entity.get("citation_count", 0),
+                publication_year=hit.entity.get("year")
+            )
+            result.title = hit.entity.get("title", "")
+            result.abstract = hit.entity.get("abstract", "")
+            result.authors = hit.entity.get("authors", [])
+            result.categories = hit.entity.get("categories", [])
+            
+            search_results.append(result)
+        
+        return search_results
+    
+    def _build_filter_expr(
+        self,
+        year_constraint: Optional[Dict[str, Optional[int]]],
+        citation_threshold: Optional[int]
+    ) -> Optional[str]:
+        """Build Milvus filter expression from constraints."""
+        conditions = []
+        
+        if year_constraint:
+            year_min = year_constraint.get('min')
+            year_max = year_constraint.get('max')
+            
+            if year_min is not None:
+                conditions.append(f"year >= {year_min}")
+            if year_max is not None:
+                conditions.append(f"year <= {year_max}")
+        
+        if citation_threshold is not None and citation_threshold > 0:
+            conditions.append(f"citation_count >= {citation_threshold}")
+        
+        return " and ".join(conditions) if conditions else None
+    
     def search_with_scores(
         self,
         query: str,

@@ -1,6 +1,19 @@
 # ArXplorer - Academic Paper Retrieval with Milvus
 
-A production-grade academic paper retrieval system using Milvus vector database for unified hybrid search (dense + sparse), with advanced query rewriting and multiple reranking options.
+Academic paper retrieval system using Milvus vector database for unified hybrid search (dense + sparse), with LLM-based query analysis, intent-aware boosting, and advanced reranking.
+
+## Deployment Options
+
+### Local Development
+See [Quick Start](#quick-start) below for local Docker setup.
+
+### AWS Production Deployment
+Deploy to AWS EC2 with Terraform for production workloads:
+- **vLLM**: GPU instance (g5.xlarge) for fast LLM inference
+- **Milvus**: CPU instance (c5.2xlarge) with EBS storage and S3 backups
+- **Cost**: ~$1,035/month (24/7) or ~$350-400/month (spot instances)
+
+See [AWS Deployment Guide](infrastructure/AWS_DEPLOYMENT.md) for detailed setup.
 
 ## Quick Start
 
@@ -126,29 +139,24 @@ src/
 ├── config/          # YAML configuration management
 ├── data/            # Document dataclass and streaming JSONL loader
 └── retrieval/
-    ├── encoders/    # Dense (SPECTER/SPECTER2) and Sparse (SPLADE) encoders
+    ├── encoders/    # Dense (SPECTER2) and Sparse (SPLADE) encoders
     ├── indexers/    # MilvusIndexer - unified hybrid indexer
     ├── searchers/   # MilvusHybridSearcher - unified search with RRF
-    ├── rerankers/   # CrossEncoderReranker, QwenReranker, JinaReranker
-    └── query_rewriting/  # LLM-based filter extraction + query rewriting (Qwen)
+    ├── rerankers/   # JinaReranker (default), CrossEncoderReranker (fallback)
+    │                # IntentBooster, TitleAuthorMatcher
+    └── query_rewriting/  # LLMQueryRewriter - intent detection + query expansion (Qwen)
 
 scripts/
-├── encode.py        # Build Milvus index (dense + sparse + metadata)
-├── query.py         # Query Milvus with hybrid search + reranking
-└── create_arxiv_dataset.py  # Extract papers from Kaggle dataset
+├── encode.py                    # Build Milvus index (dense + sparse + metadata)
+├── query.py                     # Query with hybrid search + reranking
+├── fetch_citations_openalex.py  # Fetch citation data from OpenAlex API
+└── create_arxiv_dataset.py      # Extract papers from Kaggle dataset
 ```
 
 **Milvus Unified Storage**:
-- Dense vectors (SPECTER): IVF_FLAT index
+- Dense vectors (SPECTER2): IVF_FLAT index
 - Sparse vectors (SPLADE): SPARSE_INVERTED_INDEX
 - Metadata: title, abstract, authors, categories, year, citation_count
-- Replaces: FAISS, scipy, doc_map.json, MongoDB
-
-**Key Benefits**:
-- Single source of truth for all data
-- Built-in hybrid search with RRF fusion
-- Scalar filtering (year, citations) integrated with vector search
-- Production-ready with backup/restore capabilities
 
 ## Configuration
 
@@ -178,24 +186,40 @@ milvus:
 search:
   top_k: 10          # Final results to return
   rrf_k: 60          # RRF constant (default from literature)
+  retrieval_k: 200   # Number of candidates to retrieve for reranking
+
+intent_boosting:
+  enabled: true
+  # Citation boost weights per intent (topical: 0.1, foundational: 0.3, etc.)
+  # Date boost weights per intent (foundational: 0.1 favor older, sota: 0.1 favor recent)
+
+title_author_matching:
+  enabled: true      # Fuzzy title/author matching (specific_paper, foundational intents)
+  title_threshold: 0.5   # Jaccard similarity (token-based)
+  author_threshold: 0.7  # Token overlap threshold
+  title_boost_weight: 1.0
+  author_boost_weight: 1.0
 
 reranker:
   enabled: true
-  type: "jina"       # Options: cross-encoder, qwen, jina
+  type: "jina"       # Options: jina (default), cross-encoder (fallback)
   model: "jinaai/jina-reranker-v3"
   rerank_top_k: 50   # Number of candidates to rerank
   batch_size: 50     # Jina: MUST match rerank_top_k for listwise comparison!
+  pre_rerank_weight: 0.7  # Weight for boosted RRF scores
+  rerank_weight: 0.3      # Weight for reranker scores
   
 query_rewriting:
   enabled: true
-  model: "Qwen/Qwen3-4B-Instruct-2507-FP8"
+  model: "Qwen/Qwen3-4B-AWQ"  # Quantized for faster inference
+  max_length: 128
+  temperature: 0.3
   num_rewrites: 1    # Number of query variants
-  filter_confidence_threshold: 0.7  # Minimum confidence for filters
-  enable_year_filters: true   # Extract year constraints
-  enable_citation_filters: false  # Extract citation constraints
+  use_vllm: false    # Use vLLM API for 3-10x speedup
+  vllm_endpoint: http://localhost:8000/v1
 
 data:
-  jsonl_file: "data/arxiv_300k.jsonl"
+  jsonl_file: "data/arxiv_1k.jsonl"
   use_metadata: true  # Encode title + authors + year + categories
   metadata_template: 'Title: {title}\n\nAuthors: {authors}\n\nYear: {year}\n\nCategories: {categories}\n\nAbstract: {abstract}'
 ```
@@ -216,41 +240,49 @@ python scripts/query.py --top-k 20 --no-rerank
 - **Production-ready**: Distributed architecture, backup/restore, high availability
 - **Efficient indexing**: IVF_FLAT for dense (300k docs), SPARSE_INVERTED_INDEX for sparse
 
-### LLM-Based Query Rewriting & Filter Extraction
-- **Model**: Qwen3-4B-Instruct (instruction-tuned causal LM)
-- **Dual functionality**:
-  1. **Filter extraction**: Detects canonical intent ("original", "seminal") and extracts year/citation constraints
-  2. **Query rewriting**: Generates alternative phrasings for better recall
-- **Dynamic filtering**: `year >= 2017 and citation_count >= 5000` applied to Milvus search
-- **Multi-query fusion**: Combines results from original + rewritten queries using RRF
-- **Use case**: Especially effective for finding foundational papers with varied citation styles
+### LLM-Based Query Analysis
+- **Model**: Qwen3-4B-AWQ (quantized, causal LM)
+- **Single-call extraction**: Intent detection, year/citation filters, title/author extraction, query rewrites
+- **Intent types**: topical, sota, foundational, comparison, method_lookup, specific_paper
+- **Structured output**: JSON format with target_title, target_authors, year_constraint, citation_threshold
+- **Multi-query search**: Original + rewrites + extracted title/authors as additional queries
+- **Use case**: "original unet paper" → extracts title, authors, filters, generates semantic variants
 
-### Advanced Reranking Options
-Three reranker types available via config:
+### Intent-Based Boosting
+- **Post-RRF scoring adjustment**: Citation and date weights applied per intent
+- **Citation weighting**: Topical (0.1), foundational (0.3), specific_paper (0.15)
+- **Date weighting**: SOTA favors recent (0.1), foundational favors older (0.1)
+- **Normalized scoring**: All scores normalized to [0, 1] before fusion
 
-1. **Cross-Encoder** (fastest, 33M params)
-   - Model: `cross-encoder/ms-marco-MiniLM-L-12-v2`
+### Title/Author Fuzzy Matching
+- **Token-based Jaccard similarity**: Fast, accurate matching for specific paper queries
+- **Dual matching**: Title (threshold 0.5) + Authors (threshold 0.7)
+- **Intent-aware**: Only applies to specific_paper and foundational intents
+- **Fallback**: If LLM doesn't extract title/authors, uses original query for matching
+- **No double-boosting**: Mutual exclusivity between LLM-based and query-based matching
+
+### Advanced Reranking
+Two reranker types available:
+
+1. **Jina Reranker** (default, listwise)
+   - Model: `jinaai/jina-reranker-v3` (0.6B params)
+   - **Listwise ranking**: Sees all documents at once, can compare across results
+   - Best for: Canonical queries, year-based ranking, multilingual
+   - Latency: ~200-400ms for 50 docs
+
+2. **Cross-Encoder** (fallback, pairwise)
+   - Model: `cross-encoder/ms-marco-MiniLM-L-12-v2` (33M params)
    - Best for: General queries, speed-critical applications
    - Latency: ~200-300ms for 50 docs
 
-2. **Qwen Reranker** (powerful, 0.6B params, pairwise)
-   - Model: `Qwen/Qwen3-Reranker-0.6B`
-   - Best for: Semantic understanding, customizable instructions
-   - Latency: ~800-1200ms for 50 docs (FP16 optimized)
-   - Limitation: Pairwise scoring, can't compare years across documents
-
-3. **Jina Reranker** (SOTA, 0.6B params, listwise)
-   - Model: `jinaai/jina-reranker-v3`
-   - Best for: Canonical queries, year-based ranking, multilingual
-   - Latency: ~200-400ms for 50 docs
-   - **Key advantage**: Listwise reranking - sees all documents at once, can compare years for "original" queries
-
 ### Multi-Stage Retrieval Pipeline
-1. **Filter extraction (optional)**: LLM extracts year/citation constraints from query
-2. **Query rewriting (optional)**: Generate diverse query variants with Qwen LLM
-3. **Hybrid search**: Milvus RRF fusion of dense (SPECTER) + sparse (SPLADE) with filters
-4. **Reranking**: Refine top candidates with cross-encoder/Qwen/Jina
-5. **Citation boost (optional)**: Apply citation score adjustment to final results
+1. **LLM query analysis**: Extract intent, filters, title/authors, generate rewrites
+2. **Multi-query hybrid search**: Milvus RRF fusion across original + rewrites + title/authors
+3. **Intent-based boosting**: Citation + date weighting per intent
+4. **Title/author matching**: Fuzzy matching boost (if applicable)
+5. **Jina reranking**: Listwise refinement of top candidates
+6. **Weighted fusion**: 0.7 pre-rerank + 0.3 rerank scores
+7. **Return top-k**: Final ranked results
 
 ### Metadata-Enhanced Embeddings
 Documents encoded with full context for better retrieval:
@@ -269,7 +301,7 @@ Abstract: [full abstract text...]
 This enables:
 - Exact title matching in dense/sparse search
 - Author name queries
-- Temporal context for rerankers (especially Jina's listwise comparison)
+- Temporal context for rerankers
 
 ### Scalability
 - **Streaming data loader**: Handles large JSONL files without loading all into memory
@@ -290,10 +322,12 @@ This enables:
 | Configuration | Latency (ms) | Use Case |
 |--------------|--------------|----------|
 | Hybrid (RRF only) | 100-200 | Fast exploration |
-| + Cross-Encoder | 300-500 | General queries |
-| + Qwen Reranker | 800-1200 | Semantic understanding |
-| + Jina Reranker | 300-500 | Canonical queries |
-| + Query Rewriting | +200-400 | Robustness boost |
+| + Intent Boosting | +10-20 | Minimal overhead |
+| + Title/Author Matching | +20-50 | Specific paper queries |
+| + Jina Reranker | 300-500 | Default configuration |
+| + Cross-Encoder | 300-500 | Alternative reranker |
+| + Query Rewriting | +300-1500 | Robustness boost (local model) |
+| + Query Rewriting (vLLM) | +100-300 | 3-10x faster with vLLM server |
 | + Filters | -50-100 | Narrows search space |
 
 ### Milvus Performance
@@ -304,22 +338,41 @@ This enables:
 
 ## Advanced Usage
 
-### Query Rewriting with Filters
+### Query Rewriting with LLM Analysis
 
 ```powershell
-# Enable query rewriting with filter extraction
+# Enable query rewriting with full LLM analysis
 python scripts/query.py --rewrite-query
 
 # Example: "original unet paper"
-# → Extracts filters: year <= 2016, citation_count >= 1000
+# → Intent: foundational
+# → Extracts: target_title="U-Net: Convolutional Networks...", target_authors=["Ronneberger", "Fischer", "Brox"]
 # → Rewrites: "seminal U-Net segmentation architecture"
-# → Searches with filters applied to Milvus
+# → Searches: original + rewrite + title + authors (all fused with RRF)
+# → Applies: foundational boosting + title/author matching + Jina reranking
+```
 
-# Disable citation filters (if no citation data in Milvus)
-# Edit config.yaml: enable_citation_filters: false
+### Performance Optimization: vLLM
 
-# Override filter confidence threshold
-# Edit config.yaml: filter_confidence_threshold: 0.8
+For faster query rewriting, use vLLM server:
+
+```powershell
+# Install vLLM
+pip install vllm
+
+# Start vLLM server (one-time, runs in background)
+vllm serve Qwen/Qwen3-4B-AWQ `
+  --port 8000 `
+  --dtype auto `
+  --max-model-len 2048 `
+  --gpu-memory-utilization 0.6
+```
+
+```yaml
+# In config.yaml
+query_rewriting:
+  use_vllm: true
+  vllm_endpoint: http://localhost:8000/v1
 ```
 
 ### Reranker Selection
@@ -327,24 +380,17 @@ python scripts/query.py --rewrite-query
 ```yaml
 # In config.yaml
 
-# Option 1: Cross-Encoder (fastest, general purpose)
-reranker:
-  type: cross-encoder
-  model: cross-encoder/ms-marco-MiniLM-L-12-v2
-  batch_size: 32
-
-# Option 2: Qwen (powerful semantic understanding)
-reranker:
-  type: qwen
-  model: Qwen/Qwen3-Reranker-0.6B
-  batch_size: 8  # Lower due to long sequences
-  instruction: null  # Custom instruction or null for default
-
-# Option 3: Jina (best for canonical queries, listwise)
+# Option 1: Jina (default, listwise)
 reranker:
   type: jina
   model: jinaai/jina-reranker-v3
   batch_size: 50  # MUST match rerank_top_k for listwise comparison!
+
+# Option 2: Cross-Encoder (fallback, pairwise)
+reranker:
+  type: cross-encoder
+  model: cross-encoder/ms-marco-MiniLM-L-12-v2
+  batch_size: 32
 ```
 
 ### Custom Metadata Template
@@ -420,10 +466,10 @@ reranker:
 ### Slow Queries
 
 **Optimization strategies**:
-1. Reduce `rerank_top_k` from 50 to 30
-2. Disable reranking: `--no-rerank`
-3. Use Cross-Encoder instead of Qwen for speed
-4. Enable query rewriting only when needed
+1. **Enable vLLM** for query rewriting (3-10x speedup)
+2. Reduce `rerank_top_k` from 50 to 30
+3. Disable reranking: `--no-rerank`
+4. Disable query rewriting if not needed
 5. For >1M docs: Switch to HNSW index in `config.yaml`
 
 ### Missing Dependencies
@@ -434,9 +480,8 @@ conda env remove -n arxplorer-env
 conda env create -f environment.yml -n arxplorer-env
 conda activate arxplorer-env
 
-# For SPECTER2 support
-pip uninstall peft -y
-pip install transformers==4.38.2 adapters
+# For vLLM support (optional, for fast query rewriting)
+pip install vllm
 ```
 
 ## Data Format
@@ -476,6 +521,8 @@ Indexes:
 
 ## Backup and Restore
 
+### Local Docker Backup
+
 **Backup Milvus data**:
 ```powershell
 # Using Milvus Backup tool (requires separate installation)
@@ -492,6 +539,84 @@ docker run --rm -v milvus-standalone:/data -v $(pwd)/backups:/backup ubuntu tar 
 docker-compose up -d
 ```
 
+### AWS Production Backup
+
+For AWS deployments:
+- **Automated daily backups** to S3 (scheduled at 2 AM UTC)
+- **EBS snapshots** for disaster recovery
+- **30-day retention** (configurable)
+
+See [AWS Deployment Guide](infrastructure/AWS_DEPLOYMENT.md) for backup management.
+
+## Production Deployment
+
+### AWS Infrastructure
+
+Deploy production-ready infrastructure on AWS:
+
+```bash
+cd infrastructure/terraform
+
+# Configure
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with your AWS key pair and IP
+
+# Deploy
+terraform init
+terraform apply
+
+# Get connection info
+terraform output
+```
+
+This deploys:
+- **vLLM Instance** (g5.xlarge): GPU inference server for Qwen3-4B-AWQ
+- **Milvus Instance** (c5.2xlarge): Vector database with 500GB EBS
+- **S3 Backups**: Automated daily backups with 30-day retention
+- **Security Groups**: Restricted access to API ports
+- **IAM Roles**: Least-privilege access for services
+
+**Cost Estimates**:
+- 24/7 operation: ~$1,035/month
+- With spot instances: ~$350-400/month
+- 12hr/day usage: ~$500/month
+
+See [AWS_DEPLOYMENT.md](infrastructure/AWS_DEPLOYMENT.md) for:
+- Detailed setup instructions
+- Cost optimization strategies
+- Monitoring and alerting
+- Scaling guidelines
+- Security best practices
+
+### Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────┐
+│                  AWS VPC                         │
+│                                                  │
+│  ┌──────────────────┐    ┌─────────────────┐   │
+│  │  vLLM Instance   │    │ Milvus Instance │   │
+│  │  g5.xlarge       │◄───┤  c5.2xlarge     │   │
+│  │  1x A10G GPU     │    │  8 vCPU         │   │
+│  │  Port 8000       │    │  Port 19530     │   │
+│  └──────────────────┘    └─────────────────┘   │
+│         │                         │              │
+│         │                  ┌──────▼──────┐       │
+│         │                  │   EBS 500GB │       │
+│         │                  └──────┬──────┘       │
+│         │                         │              │
+│         │                  ┌──────▼──────┐       │
+│  Client │                  │  S3 Bucket  │       │
+│  Queries│                  │  (Backups)  │       │
+│         │                  └─────────────┘       │
+└─────────┼─────────────────────────────────────-──┘
+          │
+    ┌─────▼──────┐
+    │   Local    │
+    │   Scripts  │
+    └────────────┘
+```
+
 ## References
 
 - **Milvus**: [milvus.io](https://milvus.io/) - Open-source vector database
@@ -499,5 +624,7 @@ docker-compose up -d
 - **SPECTER2**: [Singh et al., 2022](https://arxiv.org/abs/2209.07930) - Adapters for specialized embeddings
 - **SPLADE**: [Formal et al., 2021](https://arxiv.org/abs/2107.05720) - Sparse lexical and expansion model
 - **RRF**: Cormack et al., 2009 - Reciprocal Rank Fusion
-- **Qwen 3**: [Qwen Team, 2025](https://arxiv.org/abs/2505.09388) - Multilingual LLM family
-- **Jina Reranker v3**: [Wang et al., 2025](https://arxiv.org/abs/2509.25085) - Listwise document reranker 
+- **Qwen 3**: [Qwen Team, 2024](https://qwenlm.github.io/) - Multilingual LLM family
+- **Jina Reranker v3**: [Jina AI, 2024](https://huggingface.co/jinaai/jina-reranker-v3) - Listwise document reranker
+
+## Recent Updates (November 2025)

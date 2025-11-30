@@ -1,6 +1,7 @@
 """Migration script to load existing data into Milvus."""
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -13,13 +14,14 @@ from src.retrieval.encoders import DenseEncoder, SparseEncoder
 from src.retrieval.indexers.milvus_indexer import MilvusIndexer
 
 
-def migrate_to_milvus(config_path: str = "config.yaml", data_file: str = None):
+def migrate_to_milvus(config_path: str = "config.yaml", data_file: str = None, citations_file: str = "data/citations.json"):
     """
     Load existing JSONL data into Milvus collection.
     
     Args:
         config_path: Path to config.yaml
         data_file: Override JSONL data file path
+        citations_file: Path to citations.json file
     """
     print("="*70)
     print("ArXplorer: Migrate to Milvus")
@@ -37,6 +39,18 @@ def migrate_to_milvus(config_path: str = "config.yaml", data_file: str = None):
     print(f"  Sparse model: {config.encoder.sparse_model}")
     print(f"  Milvus host: {config.milvus.host}:{config.milvus.port}")
     print(f"  Collection: {config.milvus.collection_name}")
+    
+    # Load citations data
+    citations = {}
+    if Path(citations_file).exists():
+        print(f"\nLoading citation data from {citations_file}...")
+        with open(citations_file, 'r', encoding='utf-8') as f:
+            citations = json.load(f)
+        print(f"  Loaded {len(citations):,} citation records")
+    else:
+        print(f"\nWarning: Citation file not found: {citations_file}")
+        print("  Continuing without citation data (all citation_count=0)")
+    
     
     # Initialize encoders
     print("\nInitializing encoders...")
@@ -84,8 +98,22 @@ def migrate_to_milvus(config_path: str = "config.yaml", data_file: str = None):
     batch_size = 1000
     batch = []
     total_docs = 0
+    citation_matched = 0
     
     for doc in loader.load():  # Call .load() to get iterator
+        # Add citation data if available
+        arxiv_id = doc.id.replace("arxiv:", "")
+        if arxiv_id in citations:
+            doc.citation_count = citations[arxiv_id]["citation_count"]
+            doc.year = citations[arxiv_id]["year"]
+            citation_matched += 1
+            
+            # Debug: print first match
+            if citation_matched == 1:
+                print(f"\n  First citation match: {doc.id}")
+                print(f"    Citation count: {doc.citation_count}")
+                print(f"    Year: {doc.year}")
+        
         batch.append(doc)
         
         if len(batch) >= batch_size:
@@ -95,7 +123,7 @@ def migrate_to_milvus(config_path: str = "config.yaml", data_file: str = None):
                 show_progress=True
             )
             total_docs += len(batch)
-            print(f"  Progress: {total_docs} documents indexed")
+            print(f"  Progress: {total_docs} documents indexed ({citation_matched} with citations)")
             batch = []
     
     # Add remaining documents
@@ -108,6 +136,7 @@ def migrate_to_milvus(config_path: str = "config.yaml", data_file: str = None):
         total_docs += len(batch)
     
     print(f"\n✓ Loaded {total_docs} documents")
+    print(f"  Citation data matched: {citation_matched:,} documents ({citation_matched/total_docs*100:.1f}%)")
     
     # Save (build indexes and load collection)
     print("\nBuilding indexes...")
@@ -142,11 +171,19 @@ def main():
         help="Override data file path (default: from config)"
     )
     
+    parser.add_argument(
+        "--citations-file",
+        type=str,
+        default="data/citations.json",
+        help="Path to citations.json file (default: data/citations.json)"
+    )
+    
     args = parser.parse_args()
     
     migrate_to_milvus(
         config_path=args.config,
-        data_file=args.data_file
+        data_file=args.data_file,
+        citations_file=args.citations_file
     )
 
 
