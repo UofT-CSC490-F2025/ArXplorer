@@ -1,4 +1,4 @@
-# ArXplorer - Academic Paper Retrieval with Milvus
+# ArXplorer - Academic Paper Retrieval
 
 Academic paper retrieval system using Milvus vector database for unified hybrid search (dense + sparse), with LLM-based query analysis, intent-aware boosting, and advanced reranking.
 
