@@ -186,14 +186,14 @@ class Config:
                 'sparse_model': self.encoder.sparse_model,
                 'max_length': self.encoder.max_length,
                 'normalize_dense': self.encoder.normalize_dense,
-                'device': self.encoder.device
+                'device': self.encoder.device,
+                'use_specter2': self.encoder.use_specter2
             },
             'index': {
                 'batch_size': self.index.batch_size,
-                'dense_output_dir': self.index.dense_output_dir,
-                'sparse_output_dir': self.index.sparse_output_dir,
-                'use_gpu_faiss': self.index.use_gpu_faiss,
-                'checkpoint_enabled': self.index.checkpoint_enabled
+                'checkpoint_enabled': self.index.checkpoint_enabled,
+                'chunk_size': self.index.chunk_size,
+                'sparse_encoder_batch_size': self.index.sparse_encoder_batch_size
             },
             'search': {
                 'top_k': self.search.top_k,
@@ -212,6 +212,11 @@ class Config:
                 'text_key': self.data.text_key,
                 'id_key': self.data.id_key,
                 'title_key': self.data.title_key
+            },
+            'milvus': {
+                'host': self.milvus.host,
+                'port': self.milvus.port,
+                'collection_name': self.milvus.collection_name
             }
         }
         
