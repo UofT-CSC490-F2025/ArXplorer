@@ -96,6 +96,11 @@ class QueryRewritingConfig:
     use_vllm: bool = False  # Use vLLM API instead of loading model locally
     vllm_endpoint: str = "http://localhost:8000/v1"  # vLLM OpenAI-compatible endpoint
     vllm_timeout: int = 30  # Timeout for vLLM API calls (seconds)
+    # AWS Bedrock API settings
+    use_bedrock: bool = False  # Use AWS Bedrock API instead of local/vLLM
+    bedrock_model_id: str = "mistral.mistral-7b-instruct-v0:2"  # Bedrock model ID
+    bedrock_region: str = "ca-central-1"  # AWS region for Bedrock
+    bedrock_max_tokens: int = 512  # Max tokens for Bedrock response
 
 
 @dataclass

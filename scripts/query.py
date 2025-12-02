@@ -603,7 +603,9 @@ def main():
     # Setup query rewriter if enabled
     query_rewriter = None
     if config.query_rewriting.enabled:
-        if config.query_rewriting.use_vllm:
+        if hasattr(config.query_rewriting, 'use_bedrock') and config.query_rewriting.use_bedrock:
+            print(f"Initializing AWS Bedrock query rewriter: {config.query_rewriting.bedrock_model_id}")
+        elif config.query_rewriting.use_vllm:
             print(f"Initializing vLLM query rewriter: {config.query_rewriting.vllm_endpoint}")
         else:
             print("Loading query rewriting model...")
@@ -616,7 +618,11 @@ def main():
             num_rewrites=config.query_rewriting.num_rewrites,
             use_vllm=config.query_rewriting.use_vllm,
             vllm_endpoint=config.query_rewriting.vllm_endpoint,
-            vllm_timeout=config.query_rewriting.vllm_timeout
+            vllm_timeout=config.query_rewriting.vllm_timeout,
+            use_bedrock=getattr(config.query_rewriting, 'use_bedrock', False),
+            bedrock_model_id=getattr(config.query_rewriting, 'bedrock_model_id', 'mistral.mistral-7b-instruct-v0:2'),
+            bedrock_region=getattr(config.query_rewriting, 'bedrock_region', 'ca-central-1'),
+            bedrock_max_tokens=getattr(config.query_rewriting, 'bedrock_max_tokens', 512)
         )
         print("Query rewriter ready\n")
     

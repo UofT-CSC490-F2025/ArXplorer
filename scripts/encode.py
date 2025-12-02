@@ -74,7 +74,7 @@ def migrate_to_milvus(config_path: str = "config.yaml", data_file: str = None, c
     indexer = MilvusIndexer(
         dense_encoder=dense_encoder,
         sparse_encoder=sparse_encoder,
-        output_dir=str(config.index.dense_output_dir),  # For checkpoints only
+        output_dir="checkpoints",  # For checkpoints only (not used by Milvus)
         host=config.milvus.host,
         port=config.milvus.port,
         collection_name=config.milvus.collection_name,

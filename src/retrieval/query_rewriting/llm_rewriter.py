@@ -15,6 +15,14 @@ try:
 except ImportError:
     OPENAI_AVAILABLE = False
 
+# Optional boto3 for AWS Bedrock
+try:
+    import boto3
+    from botocore.exceptions import ClientError
+    BOTO3_AVAILABLE = True
+except ImportError:
+    BOTO3_AVAILABLE = False
+
 
 def build_milvus_filter_expr(filters: Dict, enable_citation_filters: bool = True, enable_year_filters: bool = True) -> Optional[str]:
     """
@@ -72,7 +80,7 @@ def build_milvus_filter_expr(filters: Dict, enable_citation_filters: bool = True
 
 
 class LLMQueryRewriter(BaseQueryRewriter):
-    """Query rewriter using LLM for query expansion - supports both local and vLLM API."""
+    """Query rewriter using LLM for query expansion - supports local, vLLM API, and AWS Bedrock."""
     
     def __init__(
         self,
@@ -84,11 +92,15 @@ class LLMQueryRewriter(BaseQueryRewriter):
         canonical_intent_enabled: bool = True,
         use_vllm: bool = False,
         vllm_endpoint: str = "http://localhost:8000/v1",
-        vllm_timeout: int = 30
+        vllm_timeout: int = 30,
+        use_bedrock: bool = False,
+        bedrock_model_id: str = "mistral.mistral-7b-instruct-v0:2",
+        bedrock_region: str = "ca-central-1",
+        bedrock_max_tokens: int = 512
     ):
         """
         Args:
-            model_name: HuggingFace model identifier
+            model_name: HuggingFace model identifier (local/vLLM only)
             device: Device to use ('cuda', 'cpu', or None for auto) - local only
             max_length: Maximum length of rewritten query
             temperature: Sampling temperature (lower = more deterministic)
@@ -97,6 +109,10 @@ class LLMQueryRewriter(BaseQueryRewriter):
             use_vllm: Use vLLM API instead of loading model locally
             vllm_endpoint: vLLM server endpoint (OpenAI-compatible API)
             vllm_timeout: Timeout for vLLM API calls in seconds
+            use_bedrock: Use AWS Bedrock API instead of local/vLLM
+            bedrock_model_id: Bedrock model ID (e.g., mistral.mistral-7b-instruct-v0:2)
+            bedrock_region: AWS region for Bedrock
+            bedrock_max_tokens: Max tokens for Bedrock response
         """
         self._model_name = model_name
         self.max_length = max_length
@@ -106,9 +122,28 @@ class LLMQueryRewriter(BaseQueryRewriter):
         self.use_vllm = use_vllm
         self.vllm_endpoint = vllm_endpoint
         self.vllm_timeout = vllm_timeout
+        self.use_bedrock = use_bedrock
+        self.bedrock_model_id = bedrock_model_id
+        self.bedrock_region = bedrock_region
+        self.bedrock_max_tokens = bedrock_max_tokens
         
-        # Initialize local model or vLLM client
-        if use_vllm:
+        # Initialize Bedrock, vLLM, or local model
+        if use_bedrock:
+            if not BOTO3_AVAILABLE:
+                raise ImportError("boto3 library required for AWS Bedrock. Install with: pip install boto3")
+            
+            print(f"Initializing AWS Bedrock client: {bedrock_model_id} in {bedrock_region}")
+            self.bedrock_client = boto3.client(
+                "bedrock-runtime",
+                region_name=bedrock_region
+            )
+            self.model = None
+            self.tokenizer = None
+            self.client = None
+            self.device = "bedrock"
+            self.is_causal_lm = True
+            print(f"✓ AWS Bedrock client initialized (model: {bedrock_model_id})")
+        elif use_vllm:
             if not OPENAI_AVAILABLE:
                 raise ImportError("OpenAI library required for vLLM. Install with: pip install openai")
             
@@ -233,11 +268,42 @@ class LLMQueryRewriter(BaseQueryRewriter):
         
         user_msg = f"Analyze this query: {query}"
         
-        # Use vLLM or local model
-        if self.use_vllm:
+        # Use Bedrock, vLLM, or local model
+        if self.use_bedrock:
+            return self._extract_structured_bedrock(system_msg, user_msg, query, num_rewrites)
+        elif self.use_vllm:
             return self._extract_structured_vllm(system_msg, user_msg, query, num_rewrites)
         else:
             return self._extract_structured_local(system_msg, user_msg, query, num_rewrites)
+    
+    def _extract_structured_bedrock(self, system_msg: str, user_msg: str, query: str, num_rewrites: int) -> Dict:
+        """Extract structured query using AWS Bedrock API."""
+        try:
+            # Format prompt for Mistral instruction format
+            prompt = f"<s>[INST] {system_msg}\n\n{user_msg} [/INST]"
+            
+            # Format request payload
+            native_request = {
+                "prompt": prompt,
+                "max_tokens": self.bedrock_max_tokens,
+                "temperature": self.temperature,
+            }
+            
+            # Invoke Bedrock model
+            response = self.bedrock_client.invoke_model(
+                modelId=self.bedrock_model_id,
+                body=json.dumps(native_request)
+            )
+            
+            # Parse response
+            model_response = json.loads(response["body"].read())
+            generated_text = model_response["outputs"][0]["text"]
+            
+            return self._parse_structured_response(generated_text, query, num_rewrites)
+            
+        except (ClientError, Exception) as e:
+            print(f"Warning: AWS Bedrock API call failed ({e}). Using fallback.")
+            return self._fallback_structured_response(query, num_rewrites)
     
     def _extract_structured_vllm(self, system_msg: str, user_msg: str, query: str, num_rewrites: int) -> Dict:
         """Extract structured query using vLLM API."""

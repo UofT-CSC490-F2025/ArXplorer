@@ -1,0 +1,113 @@
+encoder:
+  dense_model: sentence-transformers/allenai-specter
+  sparse_model: naver/splade-v3
+  max_length: 512
+  normalize_dense: true
+  device: null
+  use_specter2: true
+  specter2_base_adapter: allenai/specter2  # For document embeddings
+  specter2_query_adapter: allenai/specter2_adhoc_query  # For query embeddings
+
+index:
+  batch_size: 16  # Batch size for encoding documents
+  chunk_size: 10000  # Number of docs per chunk for sparse encoding
+  sparse_encoder_batch_size: 4  # SPLADE encoder batch size (to manage VRAM)
+
+search:
+  top_k: 10
+  rrf_k: 60
+  retrieval_k: 200  # Number of candidates to retrieve for reranking
+
+intent_boosting:
+  enabled: true  # Enable intent-based post-RRF boosting
+  # Citation boost weights per intent
+  citation_weights:
+    topical: 0.1
+    comparison: 0.1
+    method_lookup: 0.1
+    default: 0.1
+    sota: 0.2
+    foundational: 0.3
+    specific_paper: 0.15
+  # Date boost weights per intent
+  date_weights:
+    topical: 0.0
+    comparison: 0.0
+    method_lookup: 0.0
+    default: 0.0
+    sota: 0.1        # Favor recent papers
+    foundational: 0.1  # Favor older papers
+    specific_paper: 0.0
+  min_year: 1990  # Minimum year in corpus for normalization
+
+title_author_matching:
+  enabled: true  # Enable fuzzy title/author matching boost
+  title_threshold: 0.5  # Jaccard similarity threshold for title match (0-1, token-based)
+  author_threshold: 0.7  # Token overlap threshold for author match (0-1)
+  title_boost_weight: 1.0  # Boost to add for title match
+  author_boost_weight: 1.0  # Boost to add for author match
+  # Only applies to 'specific_paper' and 'foundational' intents
+  # Uses fast token-based matching instead of character-level edit distance
+
+citation:
+  enabled: true  # Enable citation-based scoring
+  data_file: data/citations.json  # Citation count lookup file
+  score_formula: log  # 'log' for log(n+1) or 'log10' for log10(n+1)
+  normalize: true  # Normalize citation scores to [0, 1]
+  missing_default: 0.0  # Default score for papers without citation data
+
+query_rewriting:
+  enabled: true  # Enable LLM-based filter extraction and query rewriting
+  model: "Qwen/Qwen3-4B-AWQ"  # Quantized for faster inference (local/vLLM only)
+  max_length: 128
+  temperature: 0.3
+  num_rewrites: 1  # Number of query rewrites to generate
+  device: null  # null = auto-detect (cuda if available, else cpu) - local mode only
+  # vLLM API settings (alternative to local)
+  use_vllm: false  # Use vLLM API instead of loading model locally
+  vllm_endpoint: http://localhost:8000/v1  # vLLM OpenAI-compatible endpoint
+  vllm_timeout: 30  # Timeout for vLLM API calls (seconds)
+  # AWS Bedrock API settings (alternative to local/vLLM)
+  use_bedrock: true  # Use AWS Bedrock API instead of local/vLLM
+  bedrock_model_id: "mistral.mistral-7b-instruct-v0:2"  # Bedrock model ID
+  bedrock_region: "ca-central-1"  # AWS region for Bedrock
+  bedrock_max_tokens: 512  # Max tokens for Bedrock response
+
+reranker:
+  enabled: false
+  # type: cross-encoder
+  # model: cross-encoder/ms-marco-MiniLM-L-12-v2 
+  type: jina
+  model: jinaai/jina-reranker-v3
+  rerank_top_k: 50  # Number of results to rerank with cross-encoder
+  max_length: 512
+  batch_size: 50  # Qwen: 8-16 (long sequences). Jina: MUST equal rerank_top_k (50) for listwise comparison!
+  # Final score fusion weights
+  pre_rerank_weight: 0.7  # Weight for boosted RRF scores (after intent boosting)
+  rerank_weight: 0.3      # Weight for cross-encoder scores
+  instruction: null  # Custom instruction for reranker (null = use model default)
+
+data:
+  jsonl_file: data/arxiv_1k.jsonl
+  text_key: abstract
+  id_key: id
+  title_key: title
+  use_metadata: true
+  categories_key: categories
+  authors_key: authors
+  year_key: published_date  # Field containing year/date information
+  metadata_template: 'Title: {title}\n\n Authors: {authors}\n\n Year: {year}\n\nCategories: {categories}\n\nAbstract: {abstract}'
+    
+milvus:
+  host: 3.96.215.21
+  port: 19530
+  collection_name: arxplorer_papers
+  # Index parameters
+  dense_index_type: IVF_FLAT  # IVF_FLAT, HNSW, or FLAT
+  dense_nlist: 1024  # Number of clusters for IVF
+  dense_nprobe: 64  # Number of clusters to search
+  sparse_index_type: SPARSE_INVERTED_INDEX
+  # Connection settings
+  connection_timeout: 30
+  # Batch insert settings
+  batch_size: 1000  # Insert documents in batches

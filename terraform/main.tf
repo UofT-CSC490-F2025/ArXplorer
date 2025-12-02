@@ -165,13 +165,22 @@ resource "aws_security_group" "milvus" {
     description = "SSH access"
   }
 
-  # Milvus gRPC
+  # Milvus gRPC (public access)
   ingress {
     from_port   = 19530
     to_port     = 19530
     protocol    = "tcp"
     cidr_blocks = [var.allowed_api_cidr]
-    description = "Milvus gRPC API"
+    description = "Milvus gRPC API (public)"
+  }
+
+  # Milvus gRPC (from Query API)
+  ingress {
+    from_port       = 19530
+    to_port         = 19530
+    protocol        = "tcp"
+    security_groups = var.enable_query_api ? [aws_security_group.query_api[0].id] : []
+    description     = "Milvus gRPC from Query API"
   }
 
   # Milvus HTTP (optional, for web UI)
@@ -473,6 +482,148 @@ resource "aws_eip" "milvus" {
   depends_on = [aws_internet_gateway.main]
 }
 
+# Query API Security Group
+resource "aws_security_group" "query_api" {
+  count       = var.enable_query_api ? 1 : 0
+  name        = "${var.project_name}-query-api-sg"
+  description = "Security group for Query API instance"
+  vpc_id      = aws_vpc.main.id
+
+  # SSH access
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.allowed_ip]
+    description = "SSH access"
+  }
+
+  # Query API port
+  ingress {
+    from_port   = var.query_api_port
+    to_port     = var.query_api_port
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Query API HTTP access"
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow all outbound"
+  }
+
+  tags = {
+    Name = "${var.project_name}-query-api-sg"
+  }
+}
+
+# IAM Role for Query API (Bedrock + CloudWatch access)
+resource "aws_iam_role" "query_api" {
+  count = var.enable_query_api ? 1 : 0
+  name  = "${var.project_name}-query-api-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "query_api" {
+  count = var.enable_query_api ? 1 : 0
+  name  = "${var.project_name}-query-api-policy"
+  role  = aws_iam_role.query_api[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock:InvokeModel",
+          "bedrock:InvokeModelWithResponseStream"
+        ]
+        Resource = "arn:aws:bedrock:${var.bedrock_region}::foundation-model/${var.bedrock_model_id}"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutMetricData",
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_instance_profile" "query_api" {
+  count = var.enable_query_api ? 1 : 0
+  name  = "${var.project_name}-query-api-profile"
+  role  = aws_iam_role.query_api[0].name
+}
+
+# EC2 Instance for Query API
+resource "aws_instance" "query_api" {
+  count                  = var.enable_query_api ? 1 : 0
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = var.query_api_instance_type
+  key_name               = var.key_name
+  subnet_id              = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.query_api[0].id]
+  iam_instance_profile   = aws_iam_instance_profile.query_api[0].name
+
+  root_block_device {
+    volume_size = 150  # Need space for models (SPECTER2, SPLADE, Jina)
+    volume_type = "gp3"
+    encrypted   = true
+  }
+
+  user_data = templatefile("${path.module}/user_data_query_api.sh", {
+    PROJECT_NAME       = var.project_name
+    MILVUS_HOST        = aws_instance.milvus.private_ip
+    MILVUS_PORT        = 19530
+    QUERY_API_PORT     = var.query_api_port
+    QUERY_API_WORKERS  = var.query_api_workers
+    BEDROCK_REGION     = var.bedrock_region
+    BEDROCK_MODEL_ID   = var.bedrock_model_id
+  })
+
+  tags = {
+    Name = "${var.project_name}-query-api"
+  }
+
+  lifecycle {
+    ignore_changes = [user_data]
+  }
+}
+
+# Elastic IP for Query API (optional)
+resource "aws_eip" "query_api" {
+  count    = var.use_elastic_ip && var.enable_query_api ? 1 : 0
+  instance = aws_instance.query_api[0].id
+  domain   = "vpc"
+
+  tags = {
+    Name = "${var.project_name}-query-api-eip"
+  }
+
+  depends_on = [aws_internet_gateway.main]
+}
+
 # CloudWatch Alarms (optional)
 resource "aws_cloudwatch_metric_alarm" "vllm_cpu" {
   count               = var.enable_alarms && var.enable_vllm ? 1 : 0
@@ -505,5 +656,22 @@ resource "aws_cloudwatch_metric_alarm" "milvus_cpu" {
 
   dimensions = {
     InstanceId = aws_instance.milvus.id
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "query_api_cpu" {
+  count               = var.enable_alarms && var.enable_query_api ? 1 : 0
+  alarm_name          = "${var.project_name}-query-api-cpu-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 80
+  alarm_description   = "This metric monitors Query API EC2 CPU utilization"
+
+  dimensions = {
+    InstanceId = aws_instance.query_api[0].id
   }
 }

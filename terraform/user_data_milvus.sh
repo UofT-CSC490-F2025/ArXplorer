@@ -30,6 +30,9 @@ echo \
 apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
+# Add ubuntu user to docker group for permissions
+usermod -aG docker ubuntu
+
 # Install AWS CLI for S3 backups
 apt-get install -y awscli
 
@@ -68,17 +71,52 @@ mkdir -p /milvus-data/backups
 cd /home/ubuntu
 curl -sfL https://raw.githubusercontent.com/milvus-io/milvus/master/deployments/docker/standalone/docker-compose.yml -o docker-compose.yml
 
-# Modify docker-compose.yml to use EBS mount
-sed -i 's|volumes:|volumes:\n      - /milvus-data/volumes/etcd:/etcd|g' docker-compose.yml
-sed -i 's|volumes:|volumes:\n      - /milvus-data/volumes/minio:/minio_data|g' docker-compose.yml
-sed -i 's|volumes:|volumes:\n      - /milvus-data/volumes/milvus:/var/lib/milvus|g' docker-compose.yml
+# Modify docker-compose.yml to use EBS mount (replace volume paths)
+# Use perl for more reliable substitution
+perl -i -pe 's|\$\{DOCKER_VOLUME_DIRECTORY:-\.\}/volumes|/milvus-data/volumes|g' docker-compose.yml
+
+# Verify the replacement worked
+echo "Checking volume path replacements..."
+if grep -q '/milvus-data/volumes' docker-compose.yml; then
+    echo "\u2713 Volume paths successfully updated to /milvus-data/volumes"
+    echo "Sample paths:"
+    grep '/milvus-data/volumes' docker-compose.yml | head -3
+else
+    echo "\u2717 ERROR: Volume path replacement failed!"
+    echo "Current volume mappings:"
+    grep -A 1 'volumes:' docker-compose.yml | grep -E '^\s+-\s+' | head -5
+    exit 1
+fi
 
 # Update Milvus version
 sed -i "s|milvusdb/milvus:.*|milvusdb/milvus:${milvus_version}|g" docker-compose.yml
 
-# Start Milvus
-echo "Starting Milvus..."
-docker compose up -d
+# Create systemd service for docker-compose (ensures restart on boot)
+# Note: Runs as root since docker requires elevated permissions
+cat > /etc/systemd/system/milvus.service <<'SYSTEMD_EOF'
+[Unit]
+Description=Milvus Vector Database
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/ubuntu
+ExecStart=/usr/bin/docker compose up -d
+ExecStop=/usr/bin/docker compose down
+
+[Install]
+WantedBy=multi-user.target
+SYSTEMD_EOF
+
+# Enable and start Milvus service
+systemctl daemon-reload
+systemctl enable milvus.service
+systemctl start milvus.service
+
+echo "Milvus systemd service created and started"
+echo "Check status with: systemctl status milvus"
 
 # Wait for Milvus to start
 echo "Waiting for Milvus to initialize..."
