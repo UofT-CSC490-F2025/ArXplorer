@@ -1,0 +1,1394 @@
+[
+  {
+    "entry": "1",
+    "target_id": "1310.4546",
+    "target_title": "Distributed Representations of Words and Phrases and their   Compositionality",
+    "query": "Improved Skip-gram 2013 paper",
+    "variant_type": "template_{keyword} {year} paper",
+    "keywords": [
+      "Improved Skip-gram"
+    ],
+    "year": "2013"
+  },
+  {
+    "entry": "1",
+    "target_id": "1310.4546",
+    "target_title": "Distributed Representations of Words and Phrases and their   Compositionality",
+    "query": "original Improved Skip-gram paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "Improved Skip-gram"
+    ],
+    "year": "2013"
+  },
+  {
+    "entry": "2",
+    "target_id": "1406.2661",
+    "target_title": "Generative Adversarial Networks",
+    "query": "GAN 2014",
+    "variant_type": "template_{keyword} {year}",
+    "keywords": [
+      "GAN",
+      "Generative Adverserial Networks"
+    ],
+    "year": "2014"
+  },
+  {
+    "entry": "2",
+    "target_id": "1406.2661",
+    "target_title": "Generative Adversarial Networks",
+    "query": "GAN 2014 paper",
+    "variant_type": "template_{keyword} {year} paper",
+    "keywords": [
+      "GAN",
+      "Generative Adverserial Networks"
+    ],
+    "year": "2014"
+  },
+  {
+    "entry": "3",
+    "target_id": "1409.0473",
+    "target_title": "Neural Machine Translation by Jointly Learning to Align and Translate",
+    "query": "seminal Encoder-Decoder Translation work",
+    "variant_type": "template_seminal {keyword} work",
+    "keywords": [
+      "Encoder-Decoder Translation"
+    ],
+    "year": "2014"
+  },
+  {
+    "entry": "3",
+    "target_id": "1409.0473",
+    "target_title": "Neural Machine Translation by Jointly Learning to Align and Translate",
+    "query": "original Encoder-Decoder Translation paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "Encoder-Decoder Translation"
+    ],
+    "year": "2014"
+  },
+  {
+    "entry": "4",
+    "target_id": "1409.3215",
+    "target_title": "Sequence to Sequence Learning with Neural Networks",
+    "query": "sequence LSTM 2014",
+    "variant_type": "template_{keyword} {year}",
+    "keywords": [
+      "seq2seq LSTM",
+      "sequence LSTM"
+    ],
+    "year": "2014"
+  },
+  {
+    "entry": "4",
+    "target_id": "1409.3215",
+    "target_title": "Sequence to Sequence Learning with Neural Networks",
+    "query": "original seq2seq LSTM paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "seq2seq LSTM",
+      "sequence LSTM"
+    ],
+    "year": "2014"
+  },
+  {
+    "entry": "5",
+    "target_id": "1409.1556",
+    "target_title": "Very Deep Convolutional Networks for Large-Scale Image Recognition",
+    "query": "VGGNet paper",
+    "variant_type": "template_{keyword} paper",
+    "keywords": [
+      "VGGNet",
+      "VGG-Net"
+    ],
+    "year": "2014"
+  },
+  {
+    "entry": "5",
+    "target_id": "1409.1556",
+    "target_title": "Very Deep Convolutional Networks for Large-Scale Image Recognition",
+    "query": "VGG-Net research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "VGGNet",
+      "VGG-Net"
+    ],
+    "year": "2014"
+  },
+  {
+    "entry": "6",
+    "target_id": "1502.03167",
+    "target_title": "Batch Normalization: Accelerating Deep Network Training by Reducing   Internal Covariate Shift",
+    "query": "seminal Batch Normalization work",
+    "variant_type": "template_seminal {keyword} work",
+    "keywords": [
+      "BatchNorm",
+      "Batch Norm",
+      "Batch Normalization"
+    ],
+    "year": "2015"
+  },
+  {
+    "entry": "6",
+    "target_id": "1502.03167",
+    "target_title": "Batch Normalization: Accelerating Deep Network Training by Reducing   Internal Covariate Shift",
+    "query": "BatchNorm 2015 paper",
+    "variant_type": "template_{keyword} {year} paper",
+    "keywords": [
+      "BatchNorm",
+      "Batch Norm",
+      "Batch Normalization"
+    ],
+    "year": "2015"
+  },
+  {
+    "entry": "7",
+    "target_id": "1505.04597",
+    "target_title": "U-Net: Convolutional Networks for Biomedical Image Segmentation",
+    "query": "U-Net: Convolutional Networks for Biomedical Image Segmentation",
+    "variant_type": "exact_title",
+    "keywords": [
+      "U-Net",
+      "unet"
+    ],
+    "year": "2015"
+  },
+  {
+    "entry": "7",
+    "target_id": "1505.04597",
+    "target_title": "U-Net: Convolutional Networks for Biomedical Image Segmentation",
+    "query": "unet 2015",
+    "variant_type": "template_{keyword} {year}",
+    "keywords": [
+      "U-Net",
+      "unet"
+    ],
+    "year": "2015"
+  },
+  {
+    "entry": "8",
+    "target_id": "1512.03385",
+    "target_title": "Deep Residual Learning for Image Recognition",
+    "query": "Residual Network 2015",
+    "variant_type": "template_{keyword} {year}",
+    "keywords": [
+      "ResNet",
+      "Residual Network",
+      "Residual Paths"
+    ],
+    "year": "2015"
+  },
+  {
+    "entry": "8",
+    "target_id": "1512.03385",
+    "target_title": "Deep Residual Learning for Image Recognition",
+    "query": "original Residual Network paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "ResNet",
+      "Residual Network",
+      "Residual Paths"
+    ],
+    "year": "2015"
+  },
+  {
+    "entry": "9",
+    "target_id": "1608.06993",
+    "target_title": "Densely Connected Convolutional Networks",
+    "query": "original Dense Neural Network paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "DenseNet",
+      "Dense Neural Network"
+    ],
+    "year": "2016"
+  },
+  {
+    "entry": "9",
+    "target_id": "1608.06993",
+    "target_title": "Densely Connected Convolutional Networks",
+    "query": "DenseNet paper",
+    "variant_type": "template_{keyword} paper",
+    "keywords": [
+      "DenseNet",
+      "Dense Neural Network"
+    ],
+    "year": "2016"
+  },
+  {
+    "entry": "10",
+    "target_id": "1506.02640",
+    "target_title": "You Only Look Once: Unified, Real-Time Object Detection",
+    "query": "original YOLO paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "YOLO",
+      "You Only Look Once"
+    ],
+    "year": "2015"
+  },
+  {
+    "entry": "10",
+    "target_id": "1506.02640",
+    "target_title": "You Only Look Once: Unified, Real-Time Object Detection",
+    "query": "seminal YOLO work",
+    "variant_type": "template_seminal {keyword} work",
+    "keywords": [
+      "YOLO",
+      "You Only Look Once"
+    ],
+    "year": "2015"
+  },
+  {
+    "entry": "11",
+    "target_id": "1412.6980",
+    "target_title": "Adam: A Method for Stochastic Optimization",
+    "query": "Adam optimizer 2014 paper",
+    "variant_type": "template_{keyword} {year} paper",
+    "keywords": [
+      "Adam",
+      "Adam optimizer"
+    ],
+    "year": "2014"
+  },
+  {
+    "entry": "11",
+    "target_id": "1412.6980",
+    "target_title": "Adam: A Method for Stochastic Optimization",
+    "query": "seminal Adam work",
+    "variant_type": "template_seminal {keyword} work",
+    "keywords": [
+      "Adam",
+      "Adam optimizer"
+    ],
+    "year": "2014"
+  },
+  {
+    "entry": "12",
+    "target_id": "1706.03762",
+    "target_title": "Attention Is All You Need",
+    "query": "Attention Is All You Need",
+    "variant_type": "exact_title",
+    "keywords": [
+      "Attention",
+      "Transformer",
+      "Attention Mechanism"
+    ],
+    "year": "2017"
+  },
+  {
+    "entry": "12",
+    "target_id": "1706.03762",
+    "target_title": "Attention Is All You Need",
+    "query": "Attention paper",
+    "variant_type": "template_{keyword} paper",
+    "keywords": [
+      "Attention",
+      "Transformer",
+      "Attention Mechanism"
+    ],
+    "year": "2017"
+  },
+  {
+    "entry": "13",
+    "target_id": "1703.06870",
+    "target_title": "Mask R-CNN",
+    "query": "original Mask R-CNN paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "Mask R-CNN"
+    ],
+    "year": "2017"
+  },
+  {
+    "entry": "13",
+    "target_id": "1703.06870",
+    "target_title": "Mask R-CNN",
+    "query": "Mask R-CNN research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "Mask R-CNN"
+    ],
+    "year": "2017"
+  },
+  {
+    "entry": "14",
+    "target_id": "1812.04948",
+    "target_title": "A Style-Based Generator Architecture for Generative Adversarial Networks",
+    "query": "seminal style gan work",
+    "variant_type": "template_seminal {keyword} work",
+    "keywords": [
+      "StyleGAN",
+      "style gan",
+      "style generative adversial network"
+    ],
+    "year": "2018"
+  },
+  {
+    "entry": "14",
+    "target_id": "1812.04948",
+    "target_title": "A Style-Based Generator Architecture for Generative Adversarial Networks",
+    "query": "seminal style generative adversial network work",
+    "variant_type": "template_seminal {keyword} work",
+    "keywords": [
+      "StyleGAN",
+      "style gan",
+      "style generative adversial network"
+    ],
+    "year": "2018"
+  },
+  {
+    "entry": "15",
+    "target_id": "1810.04805",
+    "target_title": "BERT: Pre-training of Deep Bidirectional Transformers for Language   Understanding",
+    "query": "Bidirectional Transformer paper",
+    "variant_type": "template_{keyword} paper",
+    "keywords": [
+      "BERT",
+      "Bidirectional Transformer"
+    ],
+    "year": "2018"
+  },
+  {
+    "entry": "15",
+    "target_id": "1810.04805",
+    "target_title": "BERT: Pre-training of Deep Bidirectional Transformers for Language   Understanding",
+    "query": "Bidirectional Transformer research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "BERT",
+      "Bidirectional Transformer"
+    ],
+    "year": "2018"
+  },
+  {
+    "entry": "16",
+    "target_id": "1803.03635",
+    "target_title": "The Lottery Ticket Hypothesis: Finding Sparse, Trainable Neural Networks",
+    "query": "Neural Network Pruning research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "Lottery Ticket Hypothesis",
+      "Neural Network Pruning"
+    ],
+    "year": "2018"
+  },
+  {
+    "entry": "16",
+    "target_id": "1803.03635",
+    "target_title": "The Lottery Ticket Hypothesis: Finding Sparse, Trainable Neural Networks",
+    "query": "Lottery Ticket Hypothesis research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "Lottery Ticket Hypothesis",
+      "Neural Network Pruning"
+    ],
+    "year": "2018"
+  },
+  {
+    "entry": "17",
+    "target_id": "2003.08934",
+    "target_title": "NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis",
+    "query": "Neural Radiance Field research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "Neural Radiance Field",
+      "NeRF"
+    ],
+    "year": "2020"
+  },
+  {
+    "entry": "17",
+    "target_id": "2003.08934",
+    "target_title": "NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis",
+    "query": "NeRF paper",
+    "variant_type": "template_{keyword} paper",
+    "keywords": [
+      "Neural Radiance Field",
+      "NeRF"
+    ],
+    "year": "2020"
+  },
+  {
+    "entry": "18",
+    "target_id": "2010.11929",
+    "target_title": "An Image is Worth 16x16 Words: Transformers for Image Recognition at   Scale",
+    "query": " 2020 paper",
+    "variant_type": "template_{keyword} {year} paper",
+    "keywords": [
+      "Vision Transformer",
+      "ViT",
+      ""
+    ],
+    "year": "2020"
+  },
+  {
+    "entry": "18",
+    "target_id": "2010.11929",
+    "target_title": "An Image is Worth 16x16 Words: Transformers for Image Recognition at   Scale",
+    "query": "An Image is Worth 16x16 Words: Transformers for Image Recognition at   Scale",
+    "variant_type": "exact_title",
+    "keywords": [
+      "Vision Transformer",
+      "ViT",
+      ""
+    ],
+    "year": "2020"
+  },
+  {
+    "entry": "19",
+    "target_id": "2001.08361",
+    "target_title": "Scaling Laws for Neural Language Models",
+    "query": "Scaling Laws paper",
+    "variant_type": "template_{keyword} paper",
+    "keywords": [
+      "Scaling Laws"
+    ],
+    "year": "2020"
+  },
+  {
+    "entry": "19",
+    "target_id": "2001.08361",
+    "target_title": "Scaling Laws for Neural Language Models",
+    "query": "Scaling Laws 2020",
+    "variant_type": "template_{keyword} {year}",
+    "keywords": [
+      "Scaling Laws"
+    ],
+    "year": "2020"
+  },
+  {
+    "entry": "20",
+    "target_id": "2112.10752",
+    "target_title": "High-Resolution Image Synthesis with Latent Diffusion Models",
+    "query": "LDM 2021 paper",
+    "variant_type": "template_{keyword} {year} paper",
+    "keywords": [
+      "Latent Diffusion Model",
+      "LDM",
+      "Latent Diffusion"
+    ],
+    "year": "2021"
+  },
+  {
+    "entry": "20",
+    "target_id": "2112.10752",
+    "target_title": "High-Resolution Image Synthesis with Latent Diffusion Models",
+    "query": "Latent Diffusion paper",
+    "variant_type": "template_{keyword} paper",
+    "keywords": [
+      "Latent Diffusion Model",
+      "LDM",
+      "Latent Diffusion"
+    ],
+    "year": "2021"
+  },
+  {
+    "entry": "21",
+    "target_id": "1301.3781",
+    "target_title": "Efficient Estimation of Word Representations in Vector Space",
+    "query": "original Word2Vec paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "Word2Vec",
+      "Bag of word"
+    ],
+    "year": "2013"
+  },
+  {
+    "entry": "21",
+    "target_id": "1301.3781",
+    "target_title": "Efficient Estimation of Word Representations in Vector Space",
+    "query": "Bag of word 2013",
+    "variant_type": "template_{keyword} {year}",
+    "keywords": [
+      "Word2Vec",
+      "Bag of word"
+    ],
+    "year": "2013"
+  },
+  {
+    "entry": "22",
+    "target_id": "1312.6114",
+    "target_title": "Auto-Encoding Variational Bayes",
+    "query": "Auto-Encoding Variational Bayes",
+    "variant_type": "exact_title",
+    "keywords": [
+      "VAE",
+      "Variational Autoencoder"
+    ],
+    "year": "2013"
+  },
+  {
+    "entry": "22",
+    "target_id": "1312.6114",
+    "target_title": "Auto-Encoding Variational Bayes",
+    "query": "Variational Autoencoder research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "VAE",
+      "Variational Autoencoder"
+    ],
+    "year": "2013"
+  },
+  {
+    "entry": "23",
+    "target_id": "1312.5602",
+    "target_title": "Playing Atari with Deep Reinforcement Learning",
+    "query": "Playing Atari with Deep Reinforcement Learning",
+    "variant_type": "exact_title",
+    "keywords": [
+      "Atari Reinforcment Learning",
+      "Q-learning"
+    ],
+    "year": "2013"
+  },
+  {
+    "entry": "23",
+    "target_id": "1312.5602",
+    "target_title": "Playing Atari with Deep Reinforcement Learning",
+    "query": "Atari Reinforcment Learning research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "Atari Reinforcment Learning",
+      "Q-learning"
+    ],
+    "year": "2013"
+  },
+  {
+    "entry": "24",
+    "target_id": "2005.14165",
+    "target_title": "Language Models are Few-Shot Learners",
+    "query": "Language Models are Few-Shot Leaarners",
+    "variant_type": "title_typo",
+    "keywords": [
+      "GPT3",
+      "GPT-3"
+    ],
+    "year": "2020"
+  },
+  {
+    "entry": "24",
+    "target_id": "2005.14165",
+    "target_title": "Language Models are Few-Shot Learners",
+    "query": "GPT3 2020 paper",
+    "variant_type": "template_{keyword} {year} paper",
+    "keywords": [
+      "GPT3",
+      "GPT-3"
+    ],
+    "year": "2020"
+  },
+  {
+    "entry": "25",
+    "target_id": "1807.03039",
+    "target_title": "Glow: Generative Flow with Invertible 1x1 Convolutions",
+    "query": "Glow: Generative Floww with Invertible 1x1 Convolutions",
+    "variant_type": "title_typo",
+    "keywords": [
+      "Glow",
+      "Generative Flow"
+    ],
+    "year": "2018"
+  },
+  {
+    "entry": "25",
+    "target_id": "1807.03039",
+    "target_title": "Glow: Generative Flow with Invertible 1x1 Convolutions",
+    "query": "original Glow paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "Glow",
+      "Generative Flow"
+    ],
+    "year": "2018"
+  },
+  {
+    "entry": "26",
+    "target_id": "2102.12092",
+    "target_title": "Zero-Shot Text-to-Image Generation",
+    "query": "DALLE 2021 paper",
+    "variant_type": "template_{keyword} {year} paper",
+    "keywords": [
+      "DALLE"
+    ],
+    "year": "2021"
+  },
+  {
+    "entry": "26",
+    "target_id": "2102.12092",
+    "target_title": "Zero-Shot Text-to-Image Generation",
+    "query": "DALLE research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "DALLE"
+    ],
+    "year": "2021"
+  },
+  {
+    "entry": "27",
+    "target_id": "1907.11692",
+    "target_title": "RoBERTa: A Robustly Optimized BERT Pretraining Approach",
+    "query": "RoBERTa 2019 paper",
+    "variant_type": "template_{keyword} {year} paper",
+    "keywords": [
+      "RoBERTa",
+      "Robust BERT pretraining"
+    ],
+    "year": "2019"
+  },
+  {
+    "entry": "27",
+    "target_id": "1907.11692",
+    "target_title": "RoBERTa: A Robustly Optimized BERT Pretraining Approach",
+    "query": "Robust BERT pretraining 2019 paper",
+    "variant_type": "template_{keyword} {year} paper",
+    "keywords": [
+      "RoBERTa",
+      "Robust BERT pretraining"
+    ],
+    "year": "2019"
+  },
+  {
+    "entry": "29",
+    "target_id": "2203.02155",
+    "target_title": "Training language models to follow instructions with human feedback",
+    "query": "original RLHF paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "RLHF",
+      "InstructGPT"
+    ],
+    "year": "2022"
+  },
+  {
+    "entry": "29",
+    "target_id": "2203.02155",
+    "target_title": "Training language models to follow instructions with human feedback",
+    "query": "original InstructGPT paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "RLHF",
+      "InstructGPT"
+    ],
+    "year": "2022"
+  },
+  {
+    "entry": "30",
+    "target_id": "2103.00020",
+    "target_title": "Learning Transferable Visual Models From Natural Language Supervision",
+    "query": "Contrastive Language Image Pretraining paper",
+    "variant_type": "template_{keyword} paper",
+    "keywords": [
+      "CLIP",
+      "Contrastive Language Image Pretraining"
+    ],
+    "year": "2021"
+  },
+  {
+    "entry": "30",
+    "target_id": "2103.00020",
+    "target_title": "Learning Transferable Visual Models From Natural Language Supervision",
+    "query": "seminal CLIP work",
+    "variant_type": "template_seminal {keyword} work",
+    "keywords": [
+      "CLIP",
+      "Contrastive Language Image Pretraining"
+    ],
+    "year": "2021"
+  },
+  {
+    "entry": "31",
+    "target_id": "2103.14030",
+    "target_title": "Swin Transformer: Hierarchical Vision Transformer using Shifted Windows",
+    "query": "SWIN Transformer research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "SWIN",
+      "SWIN Transformer",
+      "Shifted Windows"
+    ],
+    "year": "2021"
+  },
+  {
+    "entry": "31",
+    "target_id": "2103.14030",
+    "target_title": "Swin Transformer: Hierarchical Vision Transformer using Shifted Windows",
+    "query": "Shifted Windows research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "SWIN",
+      "SWIN Transformer",
+      "Shifted Windows"
+    ],
+    "year": "2021"
+  },
+  {
+    "entry": "32",
+    "target_id": "2204.02311",
+    "target_title": "PaLM: Scaling Language Modeling with Pathways",
+    "query": "original PaLM paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "PaLM",
+      "Pathways Language Model"
+    ],
+    "year": "2022"
+  },
+  {
+    "entry": "32",
+    "target_id": "2204.02311",
+    "target_title": "PaLM: Scaling Language Modeling with Pathways",
+    "query": "PaLM 2022 paper",
+    "variant_type": "template_{keyword} {year} paper",
+    "keywords": [
+      "PaLM",
+      "Pathways Language Model"
+    ],
+    "year": "2022"
+  },
+  {
+    "entry": "33",
+    "target_id": "2004.10934",
+    "target_title": "YOLOv4: Optimal Speed and Accuracy of Object Detection",
+    "query": "YOLOv4: Optimal Speed and Accuracy of Object Deteciton",
+    "variant_type": "title_typo",
+    "keywords": [
+      "YOLOv4"
+    ],
+    "year": "2020"
+  },
+  {
+    "entry": "33",
+    "target_id": "2004.10934",
+    "target_title": "YOLOv4: Optimal Speed and Accuracy of Object Detection",
+    "query": "seminal YOLOv4 work",
+    "variant_type": "template_seminal {keyword} work",
+    "keywords": [
+      "YOLOv4"
+    ],
+    "year": "2020"
+  },
+  {
+    "entry": "34",
+    "target_id": "1910.10683",
+    "target_title": "Exploring the Limits of Transfer Learning with a Unified Text-to-Text   Transformer",
+    "query": "T5 paper",
+    "variant_type": "template_{keyword} paper",
+    "keywords": [
+      "T5",
+      "text-to-text transformer"
+    ],
+    "year": "2019"
+  },
+  {
+    "entry": "34",
+    "target_id": "1910.10683",
+    "target_title": "Exploring the Limits of Transfer Learning with a Unified Text-to-Text   Transformer",
+    "query": "text-to-text transformer 2019",
+    "variant_type": "template_{keyword} {year}",
+    "keywords": [
+      "T5",
+      "text-to-text transformer"
+    ],
+    "year": "2019"
+  },
+  {
+    "entry": "35",
+    "target_id": "2204.08583",
+    "target_title": "VQGAN-CLIP: Open Domain Image Generation and Editing with Natural   Language Guidance",
+    "query": "vector quantized gan 2022",
+    "variant_type": "template_{keyword} {year}",
+    "keywords": [
+      "VQGAN",
+      "vector quantized gan",
+      "vector quantized generative adverserial network"
+    ],
+    "year": "2022"
+  },
+  {
+    "entry": "35",
+    "target_id": "2204.08583",
+    "target_title": "VQGAN-CLIP: Open Domain Image Generation and Editing with Natural   Language Guidance",
+    "query": "vector quantized generative adverserial network 2022",
+    "variant_type": "template_{keyword} {year}",
+    "keywords": [
+      "VQGAN",
+      "vector quantized gan",
+      "vector quantized generative adverserial network"
+    ],
+    "year": "2022"
+  },
+  {
+    "entry": "36",
+    "target_id": "1611.07004",
+    "target_title": "Image-to-Image Translation with Conditional Adversarial Networks",
+    "query": "cGAN image to image 2016 paper",
+    "variant_type": "template_{keyword} {year} paper",
+    "keywords": [
+      "pix2pix",
+      "cGAN image to image",
+      "PatchGAN discrimnator"
+    ],
+    "year": "2016"
+  },
+  {
+    "entry": "36",
+    "target_id": "1611.07004",
+    "target_title": "Image-to-Image Translation with Conditional Adversarial Networks",
+    "query": "original cGAN image to image paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "pix2pix",
+      "cGAN image to image",
+      "PatchGAN discrimnator"
+    ],
+    "year": "2016"
+  },
+  {
+    "entry": "37",
+    "target_id": "1707.06347",
+    "target_title": "Proximal Policy Optimization Algorithms",
+    "query": "Proximal Policy Optimization paper",
+    "variant_type": "template_{keyword} paper",
+    "keywords": [
+      "PPO",
+      "Proximal Policy Optimization"
+    ],
+    "year": "2017"
+  },
+  {
+    "entry": "37",
+    "target_id": "1707.06347",
+    "target_title": "Proximal Policy Optimization Algorithms",
+    "query": "seminal Proximal Policy Optimization work",
+    "variant_type": "template_seminal {keyword} work",
+    "keywords": [
+      "PPO",
+      "Proximal Policy Optimization"
+    ],
+    "year": "2017"
+  },
+  {
+    "entry": "38",
+    "target_id": "2111.06377",
+    "target_title": "Masked Autoencoders Are Scalable Vision Learners",
+    "query": "seminal Masked Autoencoder work",
+    "variant_type": "template_seminal {keyword} work",
+    "keywords": [
+      "MAE",
+      "Masked AE",
+      "Masked Autoencoder"
+    ],
+    "year": "2021"
+  },
+  {
+    "entry": "38",
+    "target_id": "2111.06377",
+    "target_title": "Masked Autoencoders Are Scalable Vision Learners",
+    "query": "original Masked AE paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "MAE",
+      "Masked AE",
+      "Masked Autoencoder"
+    ],
+    "year": "2021"
+  },
+  {
+    "entry": "39",
+    "target_id": "1409.4842",
+    "target_title": "Going Deeper with Convolutions",
+    "query": "Inceptionv1 research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "Inception",
+      "Inceptionv1",
+      "Inception CNN"
+    ],
+    "year": "2014"
+  },
+  {
+    "entry": "39",
+    "target_id": "1409.4842",
+    "target_title": "Going Deeper with Convolutions",
+    "query": "Inception CNN research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "Inception",
+      "Inceptionv1",
+      "Inception CNN"
+    ],
+    "year": "2014"
+  },
+  {
+    "entry": "40",
+    "target_id": "1602.07261",
+    "target_title": "Inception-v4, Inception-ResNet and the Impact of Residual Connections on   Learning",
+    "query": "Inception-v4, Inception-ResNet and the Impact of Residual Connections on   Learning",
+    "variant_type": "exact_title",
+    "keywords": [
+      "Inceptionv4"
+    ],
+    "year": "2016"
+  },
+  {
+    "entry": "40",
+    "target_id": "1602.07261",
+    "target_title": "Inception-v4, Inception-ResNet and the Impact of Residual Connections on   Learning",
+    "query": "Inceptionv4 paper",
+    "variant_type": "template_{keyword} paper",
+    "keywords": [
+      "Inceptionv4"
+    ],
+    "year": "2016"
+  },
+  {
+    "entry": "41",
+    "target_id": "1512.00567",
+    "target_title": "Rethinking the Inception Architecture for Computer Vision",
+    "query": "original Inceptionv3 paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "Inceptionv3"
+    ],
+    "year": "2015"
+  },
+  {
+    "entry": "41",
+    "target_id": "1512.00567",
+    "target_title": "Rethinking the Inception Architecture for Computer Vision",
+    "query": "Rethinking the Inception Architecture for Computer Vision",
+    "variant_type": "exact_title",
+    "keywords": [
+      "Inceptionv3"
+    ],
+    "year": "2015"
+  },
+  {
+    "entry": "42",
+    "target_id": "1406.1078",
+    "target_title": "Learning Phrase Representations using RNN Encoder-Decoder for   Statistical Machine Translation",
+    "query": "LLearning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation",
+    "variant_type": "title_typo",
+    "keywords": [
+      "GRU",
+      "Gated Recurrent Unit"
+    ],
+    "year": "2014"
+  },
+  {
+    "entry": "42",
+    "target_id": "1406.1078",
+    "target_title": "Learning Phrase Representations using RNN Encoder-Decoder for   Statistical Machine Translation",
+    "query": "GRU 2014",
+    "variant_type": "template_{keyword} {year}",
+    "keywords": [
+      "GRU",
+      "Gated Recurrent Unit"
+    ],
+    "year": "2014"
+  },
+  {
+    "entry": "43",
+    "target_id": "1411.4038",
+    "target_title": "Fully Convolutional Networks for Semantic Segmentation",
+    "query": "original fully convolution network paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "FCN",
+      "fully convolution network"
+    ],
+    "year": "2014"
+  },
+  {
+    "entry": "43",
+    "target_id": "1411.4038",
+    "target_title": "Fully Convolutional Networks for Semantic Segmentation",
+    "query": "FCN 2014 paper",
+    "variant_type": "template_{keyword} {year} paper",
+    "keywords": [
+      "FCN",
+      "fully convolution network"
+    ],
+    "year": "2014"
+  },
+  {
+    "entry": "44",
+    "target_id": "2304.07193",
+    "target_title": "DINOv2: Learning Robust Visual Features without Supervision",
+    "query": "improved self distillation with no labels 2023",
+    "variant_type": "template_{keyword} {year}",
+    "keywords": [
+      "DINOv2",
+      "improved self distillation with no labels"
+    ],
+    "year": "2023"
+  },
+  {
+    "entry": "44",
+    "target_id": "2304.07193",
+    "target_title": "DINOv2: Learning Robust Visual Features without Supervision",
+    "query": "DINOv2: Learning Robust Visual Features without Supervision",
+    "variant_type": "exact_title",
+    "keywords": [
+      "DINOv2",
+      "improved self distillation with no labels"
+    ],
+    "year": "2023"
+  },
+  {
+    "entry": "45",
+    "target_id": "2104.14294",
+    "target_title": "Emerging Properties in Self-Supervised Vision Transformers",
+    "query": "DINO research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "DINO",
+      "self-distillation with no labels"
+    ],
+    "year": "2021"
+  },
+  {
+    "entry": "45",
+    "target_id": "2104.14294",
+    "target_title": "Emerging Properties in Self-Supervised Vision Transformers",
+    "query": "seminal DINO work",
+    "variant_type": "template_seminal {keyword} work",
+    "keywords": [
+      "DINO",
+      "self-distillation with no labels"
+    ],
+    "year": "2021"
+  },
+  {
+    "entry": "47",
+    "target_id": "2106.09685",
+    "target_title": "LoRA: Low-Rank Adaptation of Large Language Models",
+    "query": "original low rank adapter paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "LoRA",
+      "low rank adaptation",
+      "low rank adapter"
+    ],
+    "year": "2021"
+  },
+  {
+    "entry": "47",
+    "target_id": "2106.09685",
+    "target_title": "LoRA: Low-Rank Adaptation of Large Language Models",
+    "query": "original low rank adaptation paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "LoRA",
+      "low rank adaptation",
+      "low rank adapter"
+    ],
+    "year": "2021"
+  },
+  {
+    "entry": "49",
+    "target_id": "2205.14135",
+    "target_title": "FlashAttention: Fast and Memory-Efficient Exact Attention with   IO-Awareness",
+    "query": "FlashAttention research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "FlashAttention",
+      "Flash Attention"
+    ],
+    "year": "2022"
+  },
+  {
+    "entry": "49",
+    "target_id": "2205.14135",
+    "target_title": "FlashAttention: Fast and Memory-Efficient Exact Attention with   IO-Awareness",
+    "query": "Flash Attention 2022",
+    "variant_type": "template_{keyword} {year}",
+    "keywords": [
+      "FlashAttention",
+      "Flash Attention"
+    ],
+    "year": "2022"
+  },
+  {
+    "entry": "50",
+    "target_id": "2304.02643",
+    "target_title": "Segment Anything",
+    "query": "segment anything model research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "SAM",
+      "segment anything",
+      "segment anything model"
+    ],
+    "year": "2023"
+  },
+  {
+    "entry": "50",
+    "target_id": "2304.02643",
+    "target_title": "Segment Anything",
+    "query": "seminal segment anything work",
+    "variant_type": "template_seminal {keyword} work",
+    "keywords": [
+      "SAM",
+      "segment anything",
+      "segment anything model"
+    ],
+    "year": "2023"
+  },
+  {
+    "entry": "51",
+    "target_id": "2302.05543",
+    "target_title": "Adding Conditional Control to Text-to-Image Diffusion Models",
+    "query": "ControlNET 2023 paper",
+    "variant_type": "template_{keyword} {year} paper",
+    "keywords": [
+      "ControlNET",
+      ""
+    ],
+    "year": "2023"
+  },
+  {
+    "entry": "51",
+    "target_id": "2302.05543",
+    "target_title": "Adding Conditional Control to Text-to-Image Diffusion Models",
+    "query": "original  paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "ControlNET",
+      ""
+    ],
+    "year": "2023"
+  },
+  {
+    "entry": "52",
+    "target_id": "2303.08774",
+    "target_title": "GPT-4 Technical Report",
+    "query": "seminal GPT4 work",
+    "variant_type": "template_seminal {keyword} work",
+    "keywords": [
+      "GPT4",
+      "GPT-4",
+      "openai gpt"
+    ],
+    "year": "2023"
+  },
+  {
+    "entry": "52",
+    "target_id": "2303.08774",
+    "target_title": "GPT-4 Technical Report",
+    "query": "original openai gpt paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "GPT4",
+      "GPT-4",
+      "openai gpt"
+    ],
+    "year": "2023"
+  },
+  {
+    "entry": "53",
+    "target_id": "2005.11401",
+    "target_title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+    "query": "seminal retrieval augmented generation work",
+    "variant_type": "template_seminal {keyword} work",
+    "keywords": [
+      "rag",
+      "retrieval augmented generation"
+    ],
+    "year": "2020"
+  },
+  {
+    "entry": "53",
+    "target_id": "2005.11401",
+    "target_title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+    "query": "original rag paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "rag",
+      "retrieval augmented generation"
+    ],
+    "year": "2020"
+  },
+  {
+    "entry": "54",
+    "target_id": "1910.01108",
+    "target_title": "DistilBERT, a distilled version of BERT: smaller, faster, cheaper and   lighter",
+    "query": "distilled bert paper",
+    "variant_type": "template_{keyword} paper",
+    "keywords": [
+      "DistilBert",
+      "distilled bert"
+    ],
+    "year": "2019"
+  },
+  {
+    "entry": "54",
+    "target_id": "1910.01108",
+    "target_title": "DistilBERT, a distilled version of BERT: smaller, faster, cheaper and   lighter",
+    "query": "DistilBert research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "DistilBert",
+      "distilled bert"
+    ],
+    "year": "2019"
+  },
+  {
+    "entry": "55",
+    "target_id": "1802.05365",
+    "target_title": "Deep contextualized word representations",
+    "query": "embeddings from language model 2018",
+    "variant_type": "template_{keyword} {year}",
+    "keywords": [
+      "ELMo",
+      "embeddings from language model"
+    ],
+    "year": "2018"
+  },
+  {
+    "entry": "55",
+    "target_id": "1802.05365",
+    "target_title": "Deep contextualized word representations",
+    "query": "ELMo 2018 paper",
+    "variant_type": "template_{keyword} {year} paper",
+    "keywords": [
+      "ELMo",
+      "embeddings from language model"
+    ],
+    "year": "2018"
+  },
+  {
+    "entry": "56",
+    "target_id": "1711.00937",
+    "target_title": "Neural Discrete Representation Learning",
+    "query": "original vector quantized vae paper",
+    "variant_type": "template_original {keyword} paper",
+    "keywords": [
+      "vq-vae",
+      "vector quantized vae",
+      "vector quantized variational autoencoder"
+    ],
+    "year": "2017"
+  },
+  {
+    "entry": "56",
+    "target_id": "1711.00937",
+    "target_title": "Neural Discrete Representation Learning",
+    "query": "vector quantized vae paper",
+    "variant_type": "template_{keyword} paper",
+    "keywords": [
+      "vq-vae",
+      "vector quantized vae",
+      "vector quantized variational autoencoder"
+    ],
+    "year": "2017"
+  },
+  {
+    "entry": "57",
+    "target_id": "2006.11239",
+    "target_title": "Denoising Diffusion Probabilistic Models",
+    "query": "seminal Diffusion Probabalistic work",
+    "variant_type": "template_seminal {keyword} work",
+    "keywords": [
+      "Diffusion Probabalistic Model",
+      "Denoising Diffusion Probabalistic",
+      "Diffusion Probabalistic",
+      "DDPM"
+    ],
+    "year": "2020"
+  },
+  {
+    "entry": "57",
+    "target_id": "2006.11239",
+    "target_title": "Denoising Diffusion Probabilistic Models",
+    "query": "Diffusion Probabalistic 2020",
+    "variant_type": "template_{keyword} {year}",
+    "keywords": [
+      "Diffusion Probabalistic Model",
+      "Denoising Diffusion Probabalistic",
+      "Diffusion Probabalistic",
+      "DDPM"
+    ],
+    "year": "2020"
+  },
+  {
+    "entry": "58",
+    "target_id": "2010.02502",
+    "target_title": "Denoising Diffusion Implicit Models",
+    "query": "Denosining Diffusion Implcit 2020",
+    "variant_type": "template_{keyword} {year}",
+    "keywords": [
+      "Difussion Implicit Model",
+      "Denosining Diffusion Implcit",
+      "Diffusion Implicit",
+      "DDIM"
+    ],
+    "year": "2020"
+  },
+  {
+    "entry": "58",
+    "target_id": "2010.02502",
+    "target_title": "Denoising Diffusion Implicit Models",
+    "query": "Difussion Implicit Model research paper",
+    "variant_type": "template_{keyword} research paper",
+    "keywords": [
+      "Difussion Implicit Model",
+      "Denosining Diffusion Implcit",
+      "Diffusion Implicit",
+      "DDIM"
+    ],
+    "year": "2020"
+  },
+  {
+    "entry": "59",
+    "target_id": "1701.07875",
+    "target_title": "Wasserstein GAN",
+    "query": "seminal WGAN work",
+    "variant_type": "template_seminal {keyword} work",
+    "keywords": [
+      "WGAN",
+      "Wassterstein GAN"
+    ],
+    "year": "2017"
+  },
+  {
+    "entry": "59",
+    "target_id": "1701.07875",
+    "target_title": "Wasserstein GAN",
+    "query": "Wassterstein GAN 2017 paper",
+    "variant_type": "template_{keyword} {year} paper",
+    "keywords": [
+      "WGAN",
+      "Wassterstein GAN"
+    ],
+    "year": "2017"
+  },
+  {
+    "entry": "60",
+    "target_id": "1709.01507",
+    "target_title": "Squeeze-and-Excitation Networks",
+    "query": "Squeeze-and-Excitaion Networks",
+    "variant_type": "title_typo",
+    "keywords": [
+      "SE block",
+      "SE layer",
+      "Squeeze-and-Excitation"
+    ],
+    "year": "2017"
+  },
+  {
+    "entry": "60",
+    "target_id": "1709.01507",
+    "target_title": "Squeeze-and-Excitation Networks",
+    "query": "seminal SE layer work",
+    "variant_type": "template_seminal {keyword} work",
+    "keywords": [
+      "SE block",
+      "SE layer",
+      "Squeeze-and-Excitation"
+    ],
+    "year": "2017"
+  }
+]
