@@ -1,630 +1,652 @@
-# ArXplorer - Academic Paper Retrieval
+# ArXplorer - Academic Paper Retrieval System
 
-Academic paper retrieval system using Milvus vector database for unified hybrid search (dense + sparse), with LLM-based query analysis, intent-aware boosting, and advanced reranking.
+![Coverage](.github/badges/coverage.svg)
+![Tests](https://github.com/UofT-CSC490-F2025/turtleneck/actions/workflows/test.yml/badge.svg?branch=hybrid-pipeline)
 
-## Deployment Options
+ArXplorer is a production-ready academic paper retrieval system combining **Milvus vector database** with **multi-stage hybrid search** (dense + sparse vectors), **LLM-based query analysis**, **intent-aware boosting**, and **advanced reranking**.
 
-### Local Development
-See [Quick Start](#quick-start) below for local Docker setup.
+## Table of Contents
 
-### AWS Production Deployment
-Deploy to AWS EC2 with Terraform for production workloads:
-- **vLLM**: GPU instance (g5.xlarge) for fast LLM inference
-- **Milvus**: CPU instance (c5.2xlarge) with EBS storage and S3 backups
-- **Cost**: ~$1,035/month (24/7) or ~$350-400/month (spot instances)
+- [Quick Start (Local)](#quick-start-local)
+- [AWS Deployment](#aws-deployment)
+- [Project Structure](#project-structure)
+- [Running Tests](#running-tests)
+- [Running Evaluations](#running-evaluations)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
 
-See [AWS Deployment Guide](infrastructure/AWS_DEPLOYMENT.md) for detailed setup.
+---
 
-## Quick Start
+## Quick Start (Local)
 
-### 1. Setup Milvus with Docker
+### Prerequisites
+- **Docker Desktop** ([download](https://www.docker.com/products/docker-desktop/))
+- **Python 3.10+** with conda
+- **8GB+ RAM**, **6GB+ GPU VRAM** (for encoding)
 
-**Install Docker Desktop** (if not already installed):
-- Windows/Mac: Download from [docker.com](https://www.docker.com/products/docker-desktop/)
-- Linux: Follow [official installation guide](https://docs.docker.com/engine/install/)
+### 1. Start Milvus Vector Database
 
-**Start Milvus standalone instance**:
-
-```powershell
-# Using Docker Compose (recommended)
+```bash
+# Start Milvus standalone with Docker Compose
 docker-compose -f docker-compose.milvus.yml up -d
 
-# Verify Milvus is running
-docker-compose ps
-
-# Expected output:
-# NAME           IMAGE                PORTS
-# milvus-milvus  milvusdb/milvus      0.0.0.0:19530->19530/tcp, 0.0.0.0:9091->9091/tcp
-# milvus-etcd    quay.io/coreos/etcd  2379/tcp, 2380/tcp
-# milvus-minio   minio/minio          9000/tcp, 9001/tcp
-
-# Check Milvus health
+# Verify Milvus is running (wait ~30 seconds for startup)
 curl http://localhost:9091/healthz
 # Should return: OK
+
+# Check container status
+docker-compose -f docker-compose.milvus.yml ps
 ```
 
-**Milvus management** (optional):
-```powershell
-# Stop Milvus
-docker-compose down
-
-# Stop and remove all data (fresh start)
-docker-compose down -v
-
-# View logs
-docker-compose logs -f milvus
-
-# Restart Milvus
-docker-compose restart
+**Expected output:**
 ```
-
-**Alternative: Docker run command** (if docker-compose not available):
-```powershell
-docker run -d --name milvus-standalone \
-  -p 19530:19530 -p 9091:9091 \
-  -e ETCD_ENDPOINTS=etcd:2379 \
-  -e MINIO_ADDRESS=minio:9000 \
-  milvusdb/milvus:v2.4.15 milvus run standalone
+NAME              IMAGE                     PORTS
+milvus-milvus     milvusdb/milvus:v2.4.15   0.0.0.0:19530->19530/tcp, 0.0.0.0:9091->9091/tcp
+milvus-etcd       quay.io/coreos/etcd       2379/tcp, 2380/tcp
+milvus-minio      minio/minio               9000/tcp, 9001/tcp
 ```
 
 ### 2. Setup Python Environment
 
-```powershell
-# Create conda environment
-conda env create -f environment.yml -n arxplorer-env
+```bash
+# Create conda environment from environment.yml
+conda env create -f environment.yml
+
+# Activate environment
 conda activate arxplorer-env
 ```
 
-### 3. Prepare Dataset
+### 3. Encode Documents into Milvus
 
-Download the Kaggle arXiv dataset and extract papers to JSONL format:
+You have two options for data:
 
-```powershell
-# 1. Download arXiv dataset from Kaggle
-# Visit: https://www.kaggle.com/datasets/Cornell-University/arxiv
-# Download and extract to: data/kaggle_arxiv/
+#### Option A: Use Demo Dataset (Fast - 1k papers)
 
-# 2. Create filtered JSONL dataset (default: AI/ML categories)
-python scripts/create_arxiv_dataset.py --limit 300000
-
-# Or with custom categories
-python scripts/create_arxiv_dataset.py --categories cs.ai,cs.lg,stat.ml --limit 100000
-
-# Or include all categories
-python scripts/create_arxiv_dataset.py --no-filter --limit 500000
-```
-
-This creates `data/arxiv_300k.jsonl` with standardized fields (id, title, abstract, categories, authors, year).
-
-### 4. Build Milvus Index
-
-```powershell
-# Encode documents and load into Milvus (dense + sparse + metadata)
-python scripts/encode.py --data-file data/arxiv_300k.jsonl
-
-# Or use smaller dataset for testing
+```bash
+# Encode the included 1k demo dataset (~2-5 minutes)
 python scripts/encode.py --data-file data/arxiv_1k.jsonl
 ```
 
-This will:
-- Encode documents with SPECTER (dense) and SPLADE (sparse)
-- Create Milvus collection with hybrid indexes
-- Store all metadata (title, authors, year, categories, etc.)
+#### Option B: Create Full Dataset from Kaggle (300k+ papers)
 
-### 5. Query the System
+```bash
+# 1. Download arXiv dataset from Kaggle
+# Visit: https://www.kaggle.com/datasets/Cornell-University/arxiv
+# Download arxiv-metadata-oai-snapshot.json and place in data/kaggle_arxiv/
 
-```powershell
-# Interactive hybrid search with reranking (default)
+# 2. Extract papers to JSONL format
+python scripts/create_arxiv_dataset.py --limit 300000
+
+# 3. (Optional) Fetch citation counts from OpenAlex API
+# ⚠️ WARNING: This takes 10+ hours for 300k papers
+python scripts/fetch_citations_openalex.py
+
+# 4. Encode full dataset (~90-180 minutes with GPU)
+python scripts/encode.py --data-file data/arxiv_300k.jsonl
+```
+
+**What encoding does:**
+- Generates **dense vectors** (SPECTER2, 768-dim) and **sparse vectors** (SPLADE, ~30k-dim)
+- Creates Milvus collection with hybrid indexes
+- Stores metadata (title, authors, year, categories, citations)
+
+### 4. Query the System
+
+```bash
+# Interactive mode (default)
 python scripts/query.py
 
-# With query rewriting and filter extraction
-python scripts/query.py --rewrite-query
+# Single query with full pipeline
+python scripts/query.py --query "attention is all you need" --rewrite-query
 
-# Single query (non-interactive)
-python scripts/query.py --query "attention is all you need"
-
-# Override top-k results
-python scripts/query.py --top-k 20
-
-# Disable reranking for faster queries
+# Fast queries (no reranking)
 python scripts/query.py --no-rerank
+
+# Override number of results
+python scripts/query.py --top-k 20
 ```
 
-## Architecture
-
-**Milvus-Only Architecture** (Production-Ready):
-
+**Example query:**
 ```
-src/
-├── config/          # YAML configuration management
-├── data/            # Document dataclass and streaming JSONL loader
-└── retrieval/
-    ├── encoders/    # Dense (SPECTER2) and Sparse (SPLADE) encoders
-    ├── indexers/    # MilvusIndexer - unified hybrid indexer
-    ├── searchers/   # MilvusHybridSearcher - unified search with RRF
-    ├── rerankers/   # JinaReranker (default), CrossEncoderReranker (fallback)
-    │                # IntentBooster, TitleAuthorMatcher
-    └── query_rewriting/  # LLMQueryRewriter - intent detection + query expansion (Qwen)
+Query: original unet paper
 
-scripts/
-├── encode.py                    # Build Milvus index (dense + sparse + metadata)
-├── query.py                     # Query with hybrid search + reranking
-├── fetch_citations_openalex.py  # Fetch citation data from OpenAlex API
-└── create_arxiv_dataset.py      # Extract papers from Kaggle dataset
+Intent: specific_paper
+Extracted Title: U-Net
+Extracted Authors: Ronneberger, Fischer, Brox
+
+Results:
+1. U-Net: Convolutional Networks for Biomedical Image Segmentation (2015)
+   Authors: Olaf Ronneberger, Philipp Fischer, Thomas Brox
+   Score: 0.95 | Citations: 45,234
+   
+2. SegNet: A Deep Convolutional Encoder-Decoder Architecture... (2015)
+   Score: 0.73 | Citations: 12,891
 ```
 
-**Milvus Unified Storage**:
-- Dense vectors (SPECTER2): IVF_FLAT index
-- Sparse vectors (SPLADE): SPARSE_INVERTED_INDEX
-- Metadata: title, abstract, authors, categories, year, citation_count
+---
+
+## AWS Deployment
+
+Deploy production infrastructure with **GPU inference (vLLM)**, **scalable Milvus**, and **FastAPI query endpoint**.
+
+### Prerequisites
+
+1. **AWS Account** with programmatic access
+2. **AWS CLI** configured: `aws configure`
+3. **Terraform** installed ([download](https://www.terraform.io/downloads))
+4. **SSH key pair** for EC2 instances
+
+### Step 1: Configure AWS Credentials
+
+```bash
+# Configure AWS CLI with your credentials
+aws configure
+# Enter: Access Key ID, Secret Access Key, Region (ca-central-1), Output format (json)
+```
+
+### Step 2: Setup Terraform Variables
+
+```bash
+cd terraform
+
+# Copy example variables
+cp terraform.tfvars.example terraform.tfvars
+
+# Edit terraform.tfvars with your settings
+nano terraform.tfvars
+```
+
+**Required changes in `terraform.tfvars`:**
+
+```hcl
+# 1. Generate SSH key pair
+key_name = "arxplorer-key"  # Will be created at ~/.ssh/arxplorer-key.pem
+
+# 2. Set your IP for SSH access (find with: curl ifconfig.me)
+allowed_ip = "123.456.789.0/32"  # Replace with YOUR_IP/32
+
+# 3. Get HuggingFace token for model downloads
+# Visit: https://huggingface.co/settings/tokens
+# Create read token and paste below
+huggingface_token = "hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# 4. Enable/configure components
+enable_vllm = false                   # Note: this setting is a legacy version that used GPU ec2 instance
+enable_query_api = true               # FastAPI endpoint
+milvus_instance_type = "c5.2xlarge"   # 8 vCPU, 16GB RAM
+```
+
+### Step 3: Generate SSH Key
+
+```bash
+# Generate SSH key pair (if not exists)
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/arxplorer-key -N ""
+chmod 400 ~/.ssh/arxplorer-key
+```
+
+### Step 4: Deploy Infrastructure
+
+```bash
+# Initialize Terraform
+terraform init
+
+# Preview changes
+terraform plan
+
+# Deploy (takes ~5-10 minutes)
+terraform apply
+# Type 'yes' to confirm
+
+# Save outputs for later use
+terraform output > ../aws-endpoints.txt
+```
+
+**What gets deployed:**
+- **Milvus Instance** (c5.2xlarge): Vector database with 500GB EBS storage
+- **vLLM Instance** (g5.xlarge, optional): GPU server for Qwen3-4B-AWQ inference
+- **Query API Instance** (t3.xlarge, optional): FastAPI server with full query pipeline
+- **S3 Bucket**: Automated backups with 30-day retention
+- **Security Groups**: Restricted access to your IP
+
+### Step 5: Wait for Initialization (~10 minutes)
+
+After `terraform apply`, instances need time to:
+- Download and install dependencies
+- Pull Docker images
+- Download ML models from HuggingFace
+- Start services
+
+```bash
+# Check Milvus instance readiness
+MILVUS_IP=$(terraform output -raw milvus_public_ip)
+ssh -i ~/.ssh/arxplorer-key.pem ubuntu@$MILVUS_IP 'docker ps'
+# Should show: milvus-standalone, etcd, minio containers running
+
+# Check API instance readiness (if enabled)
+API_IP=$(terraform output -raw query_api_public_ip)
+ssh -i ~/.ssh/arxplorer-key.pem ubuntu@$API_IP 'sudo systemctl status arxplorer-api'
+# Should show: active (running)
+```
+
+### Step 6: Load Data into Milvus
+
+You have **two options**:
+
+#### Option A: Restore from S3 Backup (2-5 minutes)
+
+If you have a previous Milvus backup on S3:
+
+```bash
+# List available backups
+aws s3 ls s3://arxplorer-backups-prod/volumes/
+
+# Restore backup
+MILVUS_IP=$(terraform output -raw milvus_public_ip) \
+  ./scripts/backup_restore_aws.sh restore milvus-volumes-backup-YYYYMMDD-HHMMSS.tar.gz
+```
+
+#### Option B: Encode Documents from Scratch (90-180 minutes)
+
+Encode documents locally, then upload to AWS Milvus:
+
+```bash
+# 1. Update config.yaml with AWS Milvus IP
+MILVUS_IP=$(cd terraform && terraform output -raw milvus_public_ip)
+echo "Milvus IP: $MILVUS_IP"
+
+# Edit config.yaml:
+nano config.yaml
+# Change: milvus.host: "localhost" → milvus.host: "<MILVUS_IP>"
+
+# 2. Encode documents (uses your local GPU)
+python scripts/encode.py --data-file data/arxiv_300k.jsonl
+
+# Note: This uploads vectors to AWS Milvus over the network
+# Encoding: ~90-180 min with GPU
+# Upload: ~10-20 min for 300k docs
+```
+
+### Step 7: Deploy Query API
+
+```bash
+# Deploy code to API instance
+./scripts/deploy_query_api.sh
+
+# Wait for deployment (~2-3 minutes)
+# This uploads code, installs dependencies, and restarts service
+```
+
+### Step 8: Test API
+
+```bash
+# Get API endpoint
+cd terraform
+API_ENDPOINT=$(terraform output -raw query_api_endpoint)
+
+# Health check
+curl $API_ENDPOINT/health
+
+# Test query
+curl -X POST "$API_ENDPOINT/api/v1/query" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "attention is all you need",
+    "top_k": 10,
+    "use_reranking": true
+  }'
+```
+
+### Step 9: Run Cloud Frontend (Optional)
+
+```bash
+# Start local frontend connected to cloud API
+./scripts/run_cloud_frontend.sh
+# Opens browser at http://localhost:5001
+```
+
+### AWS Management Commands
+
+```bash
+# View Milvus logs
+ssh -i ~/.ssh/arxplorer-key.pem ubuntu@$MILVUS_IP 'docker logs -f milvus-standalone'
+
+# View API logs
+ssh -i ~/.ssh/arxplorer-key.pem ubuntu@$API_IP 'sudo journalctl -u arxplorer-api -f'
+
+# Backup Milvus data to S3
+MILVUS_IP=$MILVUS_IP ./scripts/backup_restore_aws.sh backup
+
+# Stop instances (data persists on EBS)
+aws ec2 stop-instances --instance-ids $(cd terraform && terraform output -raw milvus_instance_id)
+
+# Start instances
+aws ec2 start-instances --instance-ids $(cd terraform && terraform output -raw milvus_instance_id)
+
+# Destroy infrastructure (DELETES ALL DATA)
+cd terraform
+terraform destroy
+```
+
+---
+
+## Project Structure
+
+```
+turtleneck/
+├── src/                          # Core library code
+│   ├── config/                   # YAML configuration management
+│   │   ├── settings.py           # Config dataclasses
+│   │   └── __init__.py
+│   ├── data/                     # Data models and loaders
+│   │   ├── document.py           # Document dataclass
+│   │   ├── loader.py             # Streaming JSONL loader
+│   │   └── __init__.py
+│   └── retrieval/                # Retrieval pipeline components
+│       ├── encoders/             # Dense (SPECTER2) and Sparse (SPLADE) encoders
+│       │   ├── dense.py          # SPECTER2 with adapter switching
+│       │   ├── sparse.py         # SPLADE encoder
+│       │   ├── base.py           # Base encoder interface
+│       │   └── __init__.py
+│       ├── indexers/             # Milvus indexing
+│       │   ├── milvus_indexer.py # Unified hybrid indexer
+│       │   ├── base.py           # Base indexer interface
+│       │   └── __init__.py
+│       ├── searchers/            # Milvus search
+│       │   ├── milvus_hybrid_searcher.py  # Hybrid search with RRF fusion
+│       │   ├── base.py           # Base searcher interface
+│       │   └── __init__.py
+│       ├── rerankers/            # Score refinement
+│       │   ├── jina_reranker.py          # Jina AI listwise reranker (default)
+│       │   ├── cross_encoder_reranker.py # CrossEncoder pairwise reranker
+│       │   ├── intent_booster.py         # Intent-based score boosting
+│       │   ├── title_author_matcher.py   # Fuzzy title/author matching
+│       │   ├── base.py           # Base reranker interface
+│       │   └── __init__.py
+│       ├── query_rewriting/      # LLM query analysis
+│       │   ├── llm_rewriter.py   # LLM-based intent detection + expansion
+│       │   ├── base.py           # Base rewriter interface
+│       │   └── __init__.py
+│       └── __init__.py
+├── scripts/                      # Executable scripts
+│   ├── encode.py                 # Build Milvus index from JSONL
+│   ├── query.py                  # Interactive/single query search
+│   ├── create_arxiv_dataset.py   # Extract papers from Kaggle dataset
+│   ├── fetch_citations_openalex.py  # Fetch citation counts (10+ hours)
+│   ├── run_tests.py              # Run test suite with coverage
+│   ├── deploy_query_api.sh       # Deploy code to AWS API instance
+│   ├── backup_restore_aws.sh     # Backup/restore AWS Milvus
+│   └── run_cloud_frontend.sh     # Start frontend for cloud API
+├── tests/                        # Test suite (96% coverage)
+│   ├── test_encoders.py          # Encoder unit tests
+│   ├── test_searchers.py         # Searcher unit tests
+│   ├── test_rerankers.py         # Reranker unit tests
+│   ├── test_intent_booster.py    # Intent boosting tests
+│   ├── test_title_author_matcher.py  # Title/author matching tests
+│   ├── test_query_rewriting.py   # LLM query analysis tests
+│   ├── test_indexers.py          # Indexer unit tests
+│   ├── test_loader.py            # Data loader tests
+│   └── conftest.py               # Pytest fixtures
+├── evaluation/                   # Evaluation framework
+│   ├── scripts/                  # Evaluation runner scripts
+│   ├── data/                     # Benchmark datasets
+│   ├── results/                  # Evaluation results
+│   └── README.md                 # See evaluation/README.md for details
+├── terraform/                    # AWS infrastructure as code
+│   ├── main.tf                   # Main infrastructure definition
+│   ├── outputs.tf                # Terraform outputs (IPs, endpoints)
+│   ├── terraform.tfvars.example  # Example configuration
+│   ├── user_data_milvus.sh       # Milvus instance init script
+│   ├── user_data_vllm.sh         # vLLM instance init script
+│   └── user_data_query_api.sh    # Query API instance init script
+├── data/                         # Datasets
+│   ├── arxiv_1k.jsonl            # Demo dataset (1k papers)
+│   ├── arxiv_300k.jsonl          # Full dataset (generated)
+│   ├── citations.json            # Citation counts (optional)
+│   └── kaggle_arxiv/             # Downloaded Kaggle dataset
+├── config.yaml                   # Main configuration file
+├── config.api.yaml               # API-specific configuration
+├── environment.yml               # Conda environment definition
+├── docker-compose.milvus.yml     # Local Milvus Docker setup
+├── pyproject.toml                # Python package configuration
+├── README.md                     # This file
+├── COVERAGE_REPORT.md            # Test coverage report
+└── .github/
+    ├── workflows/
+    │   └── test.yml              # CI/CD: tests + coverage badge
+    └── badges/
+        └── coverage.svg          # Auto-generated coverage badge
+```
+
+### Key Directories Explained
+
+- **`src/`**: Core library containing all retrieval pipeline components. Fully tested (96% coverage).
+- **`scripts/`**: Entry points for indexing, querying, deployment, and management.
+- **`tests/`**: Comprehensive test suite with 163 tests. Run with `pytest tests/`.
+- **`evaluation/`**: Benchmark framework for evaluating retrieval quality. See `evaluation/README.md`.
+- **`terraform/`**: Infrastructure as Code for AWS deployment. Creates GPU/CPU instances, S3 backups.
+- **`data/`**: Local storage for datasets. `.gitignore`'d except demo files.
+
+---
+
+## Running Tests
+
+ArXplorer has **96% test coverage** with **163 passing tests**.
+
+```bash
+# Run all tests with coverage report
+pytest tests/ --cov=src --cov-report=term-missing
+
+# Or use the test runner script
+python scripts/run_tests.py
+
+# Run specific test file
+pytest tests/test_searchers.py -v
+
+# Run with verbose output
+pytest tests/ -vv
+
+# Run fast tests only (skip slow integration tests)
+pytest tests/ -m "not slow"
+```
+
+**Coverage breakdown:**
+- Overall: **96.09%**
+- Dense/Sparse encoders: **100%**
+- Milvus indexer: **99.28%**
+- Milvus searcher: **99.11%**
+- Intent booster: **98.61%**
+- Title/author matcher: **97.48%**
+- LLM rewriter: **81.43%** (remaining 18% is optional vLLM/Bedrock cloud APIs)
+
+---
+
+## Running Evaluations
+
+Evaluate retrieval quality against benchmark datasets:
+
+```bash
+cd evaluation
+
+# See evaluation/README.md for:
+# - Available benchmarks (TREC-COVID, NFCorpus, etc.)
+# - How to run evaluations
+# - Interpreting results (NDCG@10, Recall@100, MRR)
+# - Comparing configurations
+```
+
+The evaluation framework supports:
+- **Automated benchmarking** against standard IR datasets
+- **Comparison** between different configurations (e.g., with/without reranking)
+- **Metrics**: NDCG@k, Recall@k, MRR, Precision@k
+- **Baseline comparisons**: BM25, dense-only, sparse-only
+
+---
 
 ## Configuration
 
-Edit `config.yaml` to customize:
+ArXplorer is configured via `config.yaml`. All settings can be overridden with CLI arguments.
+
+### Key Configuration Sections
 
 ```yaml
+# Encoders
 encoder:
-  dense_model: "sentence-transformers/allenai-specter"
-  sparse_model: "naver/splade-v3"
-  use_specter2: true  # Use SPECTER2 with adapters
-  specter2_base_adapter: "allenai/specter2"  # For documents
+  use_specter2: true                           # Use SPECTER2 with adapters
+  specter2_base_adapter: "allenai/specter2"    # For documents
   specter2_query_adapter: "allenai/specter2_adhoc_query"  # For queries
   
-index:
-  batch_size: 16
-  sparse_encoder_batch_size: 4  # SPLADE uses more VRAM
-
+# Milvus connection
 milvus:
-  host: "localhost"
+  host: "localhost"                            # Change to AWS IP for cloud
   port: 19530
   collection_name: "arxplorer_papers"
-  dense_index_type: "IVF_FLAT"  # Or HNSW for >1M docs
-  dense_nlist: 1024  # Number of IVF clusters
-  sparse_index_type: "SPARSE_INVERTED_INDEX"
-  batch_size: 1000  # Insert batch size
   
+# Search parameters
 search:
-  top_k: 10          # Final results to return
-  rrf_k: 60          # RRF constant (default from literature)
-  retrieval_k: 200   # Number of candidates to retrieve for reranking
-
-intent_boosting:
-  enabled: true
-  # Citation boost weights per intent (topical: 0.1, foundational: 0.3, etc.)
-  # Date boost weights per intent (foundational: 0.1 favor older, sota: 0.1 favor recent)
-
-title_author_matching:
-  enabled: true      # Fuzzy title/author matching (specific_paper, foundational intents)
-  title_threshold: 0.5   # Jaccard similarity (token-based)
-  author_threshold: 0.7  # Token overlap threshold
-  title_boost_weight: 1.0
-  author_boost_weight: 1.0
-
+  top_k: 10                                    # Final results
+  retrieval_k: 200                             # Candidates for reranking
+  rrf_k: 60                                    # RRF fusion constant
+  
+# Reranker
 reranker:
   enabled: true
-  type: "jina"       # Options: jina (default), cross-encoder (fallback)
-  model: "jinaai/jina-reranker-v3"
-  rerank_top_k: 50   # Number of candidates to rerank
-  batch_size: 50     # Jina: MUST match rerank_top_k for listwise comparison!
-  pre_rerank_weight: 0.7  # Weight for boosted RRF scores
-  rerank_weight: 0.3      # Weight for reranker scores
+  type: "jina"                                 # Options: jina, cross-encoder
+  rerank_top_k: 50                             # How many to rerank
+  batch_size: 50                               # MUST match rerank_top_k for Jina
   
+# LLM query analysis
 query_rewriting:
   enabled: true
-  model: "Qwen/Qwen3-4B-AWQ"  # Quantized for faster inference
-  max_length: 128
-  temperature: 0.3
-  num_rewrites: 1    # Number of query variants
-  use_vllm: false    # Use vLLM API for 3-10x speedup
-  vllm_endpoint: http://localhost:8000/v1
-
-data:
-  jsonl_file: "data/arxiv_1k.jsonl"
-  use_metadata: true  # Encode title + authors + year + categories
-  metadata_template: 'Title: {title}\n\nAuthors: {authors}\n\nYear: {year}\n\nCategories: {categories}\n\nAbstract: {abstract}'
+  model: "Qwen/Qwen3-4B-AWQ"
+  use_vllm: false                              # Set true for 3-10x speedup
+  vllm_endpoint: "http://localhost:8000/v1"
 ```
 
-CLI arguments override config values:
+### CLI Overrides
 
-```powershell
-python scripts/encode.py --batch-size 32 --data-file data/custom.jsonl
-python scripts/query.py --top-k 20 --no-rerank
+```bash
+# Override top-k
+python scripts/query.py --top-k 20
+
+# Override Milvus host
+python scripts/query.py --milvus-host 3.96.123.45
+
+# Disable reranking
+python scripts/query.py --no-rerank
+
+# Enable query rewriting
+python scripts/query.py --rewrite-query
 ```
+
+---
+
+## Architecture
+
+### Multi-Stage Retrieval Pipeline
+
+```
+User Query: "original unet paper"
+    │
+    ├──► 1. LLM Query Analysis (Qwen3-4B-AWQ)
+    │       • Intent: specific_paper
+    │       • Extracted: title="U-Net", authors=["Ronneberger"]
+    │       • Rewrites: "seminal U-Net segmentation architecture"
+    │
+    ├──► 2. Multi-Query Hybrid Search (Milvus)
+    │       • Original query → Dense + Sparse vectors
+    │       • Rewrite query → Dense + Sparse vectors
+    │       • Extracted title → Dense + Sparse vectors
+    │       • RRF Fusion across all queries
+    │       • Retrieves top 200 candidates
+    │
+    ├──► 3. Intent-Based Boosting
+    │       • specific_paper: boost citations (0.15), no date bias
+    │       • Normalize scores to [0, 1]
+    │
+    ├──► 4. Title/Author Fuzzy Matching
+    │       • Jaccard similarity on title tokens (threshold: 0.5)
+    │       • Author overlap (threshold: 0.7)
+    │       • Boost matching papers
+    │
+    ├──► 5. Jina Reranking (Listwise)
+    │       • Listwise comparison of top 50 candidates
+    │       • Captures cross-document relevance
+    │
+    ├──► 6. Score Fusion
+    │       • 0.7 × boosted_score + 0.3 × rerank_score
+    │
+    └──► Results:
+            1. U-Net: Convolutional Networks... (0.95)
+            2. SegNet: A Deep Convolutional... (0.73)
+```
+
+### Milvus Unified Storage
+
+All data stored in a single Milvus collection:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | VARCHAR | ArXiv ID (e.g., "arxiv:1706.03762") |
+| `title` | VARCHAR | Paper title |
+| `abstract` | VARCHAR | Paper abstract (truncated to 8192 chars) |
+| `authors` | ARRAY | List of author names |
+| `categories` | ARRAY | ArXiv categories (e.g., ["cs.AI", "cs.LG"]) |
+| `year` | INT64 | Publication year |
+| `citation_count` | INT64 | Citation count (from OpenAlex) |
+| `dense_vector` | FLOAT_VECTOR | SPECTER2 embedding (768-dim) |
+| `sparse_vector` | SPARSE_FLOAT_VECTOR | SPLADE embedding (~30k-dim, sparse) |
+
+**Indexes:**
+- Dense: `IVF_FLAT` (nlist=1024) for <1M docs, `HNSW` for >1M docs
+- Sparse: `SPARSE_INVERTED_INDEX` (memory-efficient)
+
+---
 
 ## Key Features
 
-### Milvus Vector Database
-- **Unified storage**: Dense + sparse vectors + metadata in single collection
-- **Hybrid search**: Built-in RRF fusion with configurable k parameter
-- **Scalar filtering**: Year and citation filtering integrated with vector search
-- **Production-ready**: Distributed architecture, backup/restore, high availability
-- **Efficient indexing**: IVF_FLAT for dense (300k docs), SPARSE_INVERTED_INDEX for sparse
+### 1. Unified Milvus Architecture
+- **Single collection** stores dense + sparse vectors + metadata
+- **Built-in hybrid search** with RRF (Reciprocal Rank Fusion)
+- **Scalar filtering** integrated with vector search (year, citations)
+- **Production-ready**: Distributed architecture, backups, high availability
 
-### LLM-Based Query Analysis
-- **Model**: Qwen3-4B-AWQ (quantized, causal LM)
-- **Single-call extraction**: Intent detection, year/citation filters, title/author extraction, query rewrites
-- **Intent types**: topical, sota, foundational, comparison, method_lookup, specific_paper
-- **Structured output**: JSON format with target_title, target_authors, year_constraint, citation_threshold
-- **Multi-query search**: Original + rewrites + extracted title/authors as additional queries
-- **Use case**: "original unet paper" → extracts title, authors, filters, generates semantic variants
+### 2. LLM Query Analysis
+- **Model**: Qwen3-4B-AWQ (quantized for speed)
+- **Extraction**: Intent, title, authors, year/citation filters, query rewrites
+- **6 Intent types**: topical, sota, foundational, comparison, method_lookup, specific_paper
+- **Multi-query search**: Uses original + rewrites + extracted title/authors
 
-### Intent-Based Boosting
-- **Post-RRF scoring adjustment**: Citation and date weights applied per intent
-- **Citation weighting**: Topical (0.1), foundational (0.3), specific_paper (0.15)
-- **Date weighting**: SOTA favors recent (0.1), foundational favors older (0.1)
-- **Normalized scoring**: All scores normalized to [0, 1] before fusion
+### 3. Intent-Aware Boosting
+- **Citation weighting**: foundational (0.3) > specific_paper (0.15) > topical (0.1)
+- **Date weighting**: SOTA favors recent (+0.1), foundational favors older (+0.1)
+- **Normalized scoring**: All boosts normalized to [0, 1] before fusion
 
-### Title/Author Fuzzy Matching
-- **Token-based Jaccard similarity**: Fast, accurate matching for specific paper queries
-- **Dual matching**: Title (threshold 0.5) + Authors (threshold 0.7)
-- **Intent-aware**: Only applies to specific_paper and foundational intents
-- **Fallback**: If LLM doesn't extract title/authors, uses original query for matching
-- **No double-boosting**: Mutual exclusivity between LLM-based and query-based matching
+### 4. Advanced Reranking
+- **Jina Reranker** (default): Listwise ranking, sees all candidates simultaneously
+- **CrossEncoder** (fallback): Pairwise ranking, faster but less context-aware
+- **Weighted fusion**: 0.7 × boosted_score + 0.3 × rerank_score
 
-### Advanced Reranking
-Two reranker types available:
-
-1. **Jina Reranker** (default, listwise)
-   - Model: `jinaai/jina-reranker-v3` (0.6B params)
-   - **Listwise ranking**: Sees all documents at once, can compare across results
-   - Best for: Canonical queries, year-based ranking, multilingual
-   - Latency: ~200-400ms for 50 docs
-
-2. **Cross-Encoder** (fallback, pairwise)
-   - Model: `cross-encoder/ms-marco-MiniLM-L-12-v2` (33M params)
-   - Best for: General queries, speed-critical applications
-   - Latency: ~200-300ms for 50 docs
-
-### Multi-Stage Retrieval Pipeline
-1. **LLM query analysis**: Extract intent, filters, title/authors, generate rewrites
-2. **Multi-query hybrid search**: Milvus RRF fusion across original + rewrites + title/authors
-3. **Intent-based boosting**: Citation + date weighting per intent
-4. **Title/author matching**: Fuzzy matching boost (if applicable)
-5. **Jina reranking**: Listwise refinement of top candidates
-6. **Weighted fusion**: 0.7 pre-rerank + 0.3 rerank scores
-7. **Return top-k**: Final ranked results
-
-### Metadata-Enhanced Embeddings
-Documents encoded with full context for better retrieval:
+### 5. Metadata-Enhanced Embeddings
+Documents encoded with full context:
 ```
 Title: U-Net: Convolutional Networks for Biomedical Image Segmentation
-
 Authors: Olaf Ronneberger, Philipp Fischer, Thomas Brox
-
 Year: 2015
-
 Categories: cs.CV
-
-Abstract: [full abstract text...]
+Abstract: [full text...]
 ```
 
-This enables:
-- Exact title matching in dense/sparse search
-- Author name queries
-- Temporal context for rerankers
+This enables exact title matching, author queries, and temporal context for rerankers.
 
-### Scalability
-- **Streaming data loader**: Handles large JSONL files without loading all into memory
-- **Batch processing**: Configurable batch sizes for encoding
-- **Milvus distributed**: Can scale to billions of vectors (cluster mode)
-- **Memory-efficient**: Sparse inverted index, IVF clustering for dense vectors
-- **GPU acceleration**: CUDA support for all encoders and rerankers
-
-## Performance Notes (300k corpus on RTX 4070 Super)
-
-### Encoding Time
-- **Dense (SPECTER)**: ~30-60 min for 300k docs (batch_size=16, GPU)
-- **Sparse (SPLADE)**: ~60-120 min for 300k docs (batch_size=4, GPU)
-- **Total encoding**: ~90-180 min for full hybrid index
-- **GPU memory**: ~6-8 GB peak
-
-### Query Latency
-| Configuration | Latency (ms) | Use Case |
-|--------------|--------------|----------|
-| Hybrid (RRF only) | 100-200 | Fast exploration |
-| + Intent Boosting | +10-20 | Minimal overhead |
-| + Title/Author Matching | +20-50 | Specific paper queries |
-| + Jina Reranker | 300-500 | Default configuration |
-| + Cross-Encoder | 300-500 | Alternative reranker |
-| + Query Rewriting | +300-1500 | Robustness boost (local model) |
-| + Query Rewriting (vLLM) | +100-300 | 3-10x faster with vLLM server |
-| + Filters | -50-100 | Narrows search space |
-
-### Milvus Performance
-- **Collection size**: ~5-8 GB for 300k papers (vectors + metadata)
-- **Index build**: ~2-5 min for 300k docs
-- **Search latency**: ~50-100ms for hybrid search without reranking
-- **Scalability**: Tested up to 300k docs, supports 10M+ with HNSW index
-
-## Advanced Usage
-
-### Query Rewriting with LLM Analysis
-
-```powershell
-# Enable query rewriting with full LLM analysis
-python scripts/query.py --rewrite-query
-
-# Example: "original unet paper"
-# → Intent: foundational
-# → Extracts: target_title="U-Net: Convolutional Networks...", target_authors=["Ronneberger", "Fischer", "Brox"]
-# → Rewrites: "seminal U-Net segmentation architecture"
-# → Searches: original + rewrite + title + authors (all fused with RRF)
-# → Applies: foundational boosting + title/author matching + Jina reranking
-```
-
-### Performance Optimization: vLLM
-
-For faster query rewriting, use vLLM server:
-
-```powershell
-# Install vLLM
-pip install vllm
-
-# Start vLLM server (one-time, runs in background)
-vllm serve Qwen/Qwen3-4B-AWQ `
-  --port 8000 `
-  --dtype auto `
-  --max-model-len 2048 `
-  --gpu-memory-utilization 0.6
-```
-
-```yaml
-# In config.yaml
-query_rewriting:
-  use_vllm: true
-  vllm_endpoint: http://localhost:8000/v1
-```
-
-### Reranker Selection
-
-```yaml
-# In config.yaml
-
-# Option 1: Jina (default, listwise)
-reranker:
-  type: jina
-  model: jinaai/jina-reranker-v3
-  batch_size: 50  # MUST match rerank_top_k for listwise comparison!
-
-# Option 2: Cross-Encoder (fallback, pairwise)
-reranker:
-  type: cross-encoder
-  model: cross-encoder/ms-marco-MiniLM-L-12-v2
-  batch_size: 32
-```
-
-### Custom Metadata Template
-
-```yaml
-# In config.yaml
-data:
-  use_metadata: true
-  metadata_template: 'Title: {title}\n\nAuthors: {authors}\n\nYear: {year}\n\nCategories: {categories}\n\nAbstract: {abstract}'
-```
-
-After changing template, re-encode documents:
-```powershell
-python scripts/encode.py --data-file data/arxiv_300k.jsonl
-```
-
-## Troubleshooting
-
-### Milvus Connection Issues
-
-```powershell
-# Check if Milvus is running
-docker-compose ps
-
-# Check Milvus health
-curl http://localhost:9091/healthz
-
-# View Milvus logs
-docker-compose logs -f milvus
-
-# Restart Milvus
-docker-compose restart
-
-# Fresh start (removes all data)
-docker-compose down -v
-docker-compose up -d
-```
-
-### Collection Not Found
-
-```powershell
-# Run encoding first to create collection
-python scripts/encode.py --data-file data/arxiv_1k.jsonl
-
-# Or check if collection exists
-# In Python:
-from pymilvus import connections, utility
-connections.connect(host='localhost', port='19530')
-print(utility.list_collections())
-```
-
-### Import Errors
-
-Ensure you're running from repo root and conda env is active:
-```powershell
-conda activate arxplorer-env
-cd "C:\Users\Kyle Vavasour\Desktop\CSC490-3"
-python scripts/query.py
-```
-
-### CUDA Out of Memory
-
-Reduce batch sizes in `config.yaml`:
-```yaml
-index:
-  batch_size: 8  # Reduce from 16
-  sparse_encoder_batch_size: 2  # Reduce from 4
-
-reranker:
-  batch_size: 4  # Reduce from 8 (Qwen) or 16 (others)
-```
-
-### Slow Queries
-
-**Optimization strategies**:
-1. **Enable vLLM** for query rewriting (3-10x speedup)
-2. Reduce `rerank_top_k` from 50 to 30
-3. Disable reranking: `--no-rerank`
-4. Disable query rewriting if not needed
-5. For >1M docs: Switch to HNSW index in `config.yaml`
-
-### Missing Dependencies
-
-```powershell
-# Reinstall environment
-conda env remove -n arxplorer-env
-conda env create -f environment.yml -n arxplorer-env
-conda activate arxplorer-env
-
-# For vLLM support (optional, for fast query rewriting)
-pip install vllm
-```
-
-## Data Format
-
-Input JSONL format (one JSON object per line):
-```json
-{"id": "arxiv:2004.07180", "title": "SPECTER: Document-level Representation Learning...", "abstract": "...", "authors": ["Arman Cohan", "..."], "categories": ["cs.CL"], "published_date": "2020-04-15"}
-{"id": "arxiv:1706.03762", "title": "Attention Is All You Need", "abstract": "...", "authors": ["Ashish Vaswani", "..."], "categories": ["cs.CL", "cs.LG"], "published_date": "2017-06-12"}
-```
-
-Required fields (configurable via `config.yaml`):
-- `id`: Document identifier
-- `abstract` (or custom `text_key`): Text to encode
-- `title`: Paper title
-- `published_date`: Publication date (year extracted automatically)
-
-Optional fields:
-- `authors`: List of author names
-- `categories`: List of categories (e.g., cs.AI, cs.CV)
-
-## Milvus Schema
-
-The Milvus collection stores:
-- `id` (VARCHAR): Document ID
-- `title` (VARCHAR): Paper title  
-- `abstract` (VARCHAR): Paper abstract (truncated to 8192 chars)
-- `authors` (ARRAY): List of author names
-- `categories` (ARRAY): List of categories
-- `year` (INT64): Publication year
-- `citation_count` (INT64): Citation count (default 0)
-- `dense_vector` (FLOAT_VECTOR): SPECTER embedding (768D)
-- `sparse_vector` (SPARSE_FLOAT_VECTOR): SPLADE embedding (~30k dims, sparse)
-
-Indexes:
-- Dense: IVF_FLAT (nlist=1024) for ~300k docs, HNSW for >1M docs
-- Sparse: SPARSE_INVERTED_INDEX (memory-efficient)
-
-## Backup and Restore
-
-### Local Docker Backup
-
-**Backup Milvus data**:
-```powershell
-# Using Milvus Backup tool (requires separate installation)
-# See: https://milvus.io/docs/milvus_backup_overview.md
-
-# Or backup Docker volumes
-docker-compose down
-docker run --rm -v milvus-standalone:/data -v $(pwd)/backups:/backup ubuntu tar czf /backup/milvus-backup.tar.gz /data
-```
-
-**Restore from backup**:
-```powershell
-docker run --rm -v milvus-standalone:/data -v $(pwd)/backups:/backup ubuntu tar xzf /backup/milvus-backup.tar.gz -C /
-docker-compose up -d
-```
-
-### AWS Production Backup
-
-For AWS deployments:
-- **Automated daily backups** to S3 (scheduled at 2 AM UTC)
-- **EBS snapshots** for disaster recovery
-- **30-day retention** (configurable)
-
-See [AWS Deployment Guide](infrastructure/AWS_DEPLOYMENT.md) for backup management.
-
-## Production Deployment
-
-### AWS Infrastructure
-
-Deploy production-ready infrastructure on AWS:
-
-```bash
-cd infrastructure/terraform
-
-# Configure
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your AWS key pair and IP
-
-# Deploy
-terraform init
-terraform apply
-
-# Get connection info
-terraform output
-```
-
-This deploys:
-- **vLLM Instance** (g5.xlarge): GPU inference server for Qwen3-4B-AWQ
-- **Milvus Instance** (c5.2xlarge): Vector database with 500GB EBS
-- **S3 Backups**: Automated daily backups with 30-day retention
-- **Security Groups**: Restricted access to API ports
-- **IAM Roles**: Least-privilege access for services
-
-**Cost Estimates**:
-- 24/7 operation: ~$1,035/month
-- With spot instances: ~$350-400/month
-- 12hr/day usage: ~$500/month
-
-See [AWS_DEPLOYMENT.md](infrastructure/AWS_DEPLOYMENT.md) for:
-- Detailed setup instructions
-- Cost optimization strategies
-- Monitoring and alerting
-- Scaling guidelines
-- Security best practices
-
-### Architecture Diagram
-
-```
-┌─────────────────────────────────────────────────┐
-│                  AWS VPC                         │
-│                                                  │
-│  ┌──────────────────┐    ┌─────────────────┐   │
-│  │  vLLM Instance   │    │ Milvus Instance │   │
-│  │  g5.xlarge       │◄───┤  c5.2xlarge     │   │
-│  │  1x A10G GPU     │    │  8 vCPU         │   │
-│  │  Port 8000       │    │  Port 19530     │   │
-│  └──────────────────┘    └─────────────────┘   │
-│         │                         │              │
-│         │                  ┌──────▼──────┐       │
-│         │                  │   EBS 500GB │       │
-│         │                  └──────┬──────┘       │
-│         │                         │              │
-│         │                  ┌──────▼──────┐       │
-│  Client │                  │  S3 Bucket  │       │
-│  Queries│                  │  (Backups)  │       │
-│         │                  └─────────────┘       │
-└─────────┼─────────────────────────────────────-──┘
-          │
-    ┌─────▼──────┐
-    │   Local    │
-    │   Scripts  │
-    └────────────┘
-```
+---
 
 ## References
 
 - **Milvus**: [milvus.io](https://milvus.io/) - Open-source vector database
-- **SPECTER**: [Cohan et al., 2020](https://arxiv.org/abs/2004.07180) - Document-level embeddings
-- **SPECTER2**: [Singh et al., 2022](https://arxiv.org/abs/2209.07930) - Adapters for specialized embeddings
-- **SPLADE**: [Formal et al., 2021](https://arxiv.org/abs/2107.05720) - Sparse lexical and expansion model
+- **SPECTER2**: [Singh et al., 2022](https://arxiv.org/abs/2209.07930) - Document embeddings with adapters
+- **SPLADE**: [Formal et al., 2021](https://arxiv.org/abs/2107.05720) - Sparse lexical expansion
 - **RRF**: Cormack et al., 2009 - Reciprocal Rank Fusion
-- **Qwen 3**: [Qwen Team, 2024](https://qwenlm.github.io/) - Multilingual LLM family
-- **Jina Reranker v3**: [Jina AI, 2024](https://huggingface.co/jinaai/jina-reranker-v3) - Listwise document reranker
+- **Qwen3**: [Qwen Team, 2024](https://qwenlm.github.io/) - Multilingual LLM family
+- **Jina Reranker v3**: [Jina AI, 2024](https://huggingface.co/jinaai/jina-reranker-v3) - Listwise reranker
 
-## Recent Updates (November 2025)
+---
