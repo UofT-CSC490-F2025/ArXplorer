@@ -600,6 +600,7 @@ resource "aws_instance" "query_api" {
     QUERY_API_WORKERS  = var.query_api_workers
     BEDROCK_REGION     = var.bedrock_region
     BEDROCK_MODEL_ID   = var.bedrock_model_id
+    HF_TOKEN           = var.hf_token
   })
 
   tags = {

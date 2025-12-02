@@ -48,3 +48,7 @@ backup_retention_days = 30
 
 # Monitoring
 enable_alarms = false  # Set to true to enable CloudWatch alarms
+
+# HuggingFace Token (optional, for gated models like SPLADE v3)
+# Get your token from: https://huggingface.co/settings/tokens
+# hf_token = "hf_..."  # Uncomment and add your token to use full SPLADE v3 model

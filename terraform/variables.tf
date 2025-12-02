@@ -187,3 +187,11 @@ variable "bedrock_model_id" {
   type        = string
   default     = "mistral.mistral-7b-instruct-v0:2"
 }
+
+# HuggingFace Configuration
+variable "hf_token" {
+  description = "HuggingFace API token for model downloads (optional, for gated models)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}

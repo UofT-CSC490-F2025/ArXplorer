@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArXplorer - Semantic Academic Search (Cloud)</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Custom styles -->
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .search-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+        
+        .paper-card {
+            transition: all 0.3s ease;
+            border-left: 4px solid transparent;
+        }
+        
+        .paper-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            border-left-color: #667eea;
+        }
+        
+        .score-badge {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+        }
+        
+        .tag {
+            background: rgba(102, 126, 234, 0.1);
+            color: #667eea;
+        }
+        
+        .author-tag {
+            background: rgba(118, 75, 162, 0.1);
+            color: #764ba2;
+        }
+        
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .search-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .search-btn:hover {
+            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+        }
+        
+        .cloud-badge {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="gradient-bg text-white py-8">
+        <div class="container mx-auto px-4">
+            <div class="text-center">
+                <h1 class="text-4xl font-bold mb-2">ArXplorer</h1>
+                <p class="text-lg opacity-90">Semantic Academic Paper Search</p>
+            </div>
+        </div>
+    </header>
+
+    <!-- Search Interface -->
+    <div class="container mx-auto px-4 -mt-6">
+        <div class="search-container rounded-lg shadow-xl p-6 mb-8">
+            <div class="flex flex-col space-y-4">
+                <!-- Main Search Bar -->
+                <div class="flex space-x-3">
+                    <div class="flex-1 relative">
+                        <input 
+                            type="text" 
+                            id="search-query" 
+                            placeholder="Search for papers... (e.g., 'attention mechanism', 'transformers', 'neural networks')"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"
+                        />
+                    </div>
+                    <button 
+                        id="search-btn" 
+                        class="search-btn text-white px-8 py-3 rounded-lg font-medium hover:shadow-lg transition-all duration-200"
+                    >
+                        Search
+                    </button>
+                </div>
+                
+                <!-- Search Options -->
+                <div class="flex flex-wrap items-center space-x-4 text-sm">
+                    <label class="flex items-center space-x-2">
+                        <input type="checkbox" id="enable-rewrite" checked class="rounded">
+                        <span>Query Analysis</span>
+                    </label>
+                    <label class="flex items-center space-x-2">
+                        <span>Results:</span>
+                        <select id="top-k" class="border border-gray-300 rounded px-2 py-1">
+                            <option value="5">5</option>
+                            <option value="10" selected>10</option>
+                            <option value="20">20</option>
+                            <option value="30">30</option>
+                            <option value="50">50</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loading" class="hidden text-center py-8">
+            <div class="loading-spinner mx-auto"></div>
+            <p class="text-gray-600 mt-3">Searching papers...</p>
+        </div>
+
+        <!-- Search Results -->
+        <div id="results-container" class="hidden">
+            <!-- Search Info -->
+            <div id="search-info" class="mb-6 p-4 bg-blue-50 rounded-lg">
+                <!-- Will be populated by JavaScript -->
+            </div>
+
+            <!-- Results Grid -->
+            <div id="results-grid" class="space-y-6">
+                <!-- Results will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Error State -->
+        <div id="error-container" class="hidden">
+            <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+                <h3 class="text-lg font-medium text-red-800 mb-2">Search Error</h3>
+                <p id="error-message" class="text-red-600"></p>
+            </div>
+        </div>
+
+        <!-- Welcome/Example Queries -->
+        <div id="welcome-section" class="text-center py-12">
+            <h2 class="text-2xl font-semibold mb-6 text-gray-800">Try These Example Searches</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <button class="example-query bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all duration-200 text-left">
+                    <h3 class="font-medium text-blue-600 mb-1">Transformer Architecture</h3>
+                    <p class="text-sm text-gray-600">"attention is all you need"</p>
+                </button>
+                <button class="example-query bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all duration-200 text-left">
+                    <h3 class="font-medium text-blue-600 mb-1">Computer Vision</h3>
+                    <p class="text-sm text-gray-600">"convolutional neural networks"</p>
+                </button>
+                <button class="example-query bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all duration-200 text-left">
+                    <h3 class="font-medium text-blue-600 mb-1">Recent Research</h3>
+                    <p class="text-sm text-gray-600">"large language models"</p>
+                </button>
+                <button class="example-query bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all duration-200 text-left">
+                    <h3 class="font-medium text-blue-600 mb-1">Specific Paper</h3>
+                    <p class="text-sm text-gray-600">"BERT paper"</p>
+                </button>
+                <button class="example-query bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all duration-200 text-left">
+                    <h3 class="font-medium text-blue-600 mb-1">Time-based Search</h3>
+                    <p class="text-sm text-gray-600">"reinforcement learning 2020"</p>
+                </button>
+                <button class="example-query bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all duration-200 text-left">
+                    <h3 class="font-medium text-blue-600 mb-1">Foundational Work</h3>
+                    <p class="text-sm text-gray-600">"neural network fundamentals"</p>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-8 mt-16">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-sm text-gray-400">ArXplorer</p>
+        </div>
+    </footer>
+
+    <!-- JavaScript -->
+    <script>
+        // DOM Elements
+        const searchQuery = document.getElementById('search-query');
+        const searchBtn = document.getElementById('search-btn');
+        const enableRewrite = document.getElementById('enable-rewrite');
+        const topK = document.getElementById('top-k');
+        const loading = document.getElementById('loading');
+        const resultsContainer = document.getElementById('results-container');
+        const searchInfo = document.getElementById('search-info');
+        const resultsGrid = document.getElementById('results-grid');
+        const errorContainer = document.getElementById('error-container');
+        const errorMessage = document.getElementById('error-message');
+        const welcomeSection = document.getElementById('welcome-section');
+        const exampleQueries = document.querySelectorAll('.example-query');
+
+        // Search functionality
+        async function performSearch() {
+            const query = searchQuery.value.trim();
+            if (!query) return;
+
+            // Show loading state
+            hideAllSections();
+            loading.classList.remove('hidden');
+            
+            const startTime = Date.now();
+            
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query: query,
+                        top_k: parseInt(topK.value),
+                        enable_reranking: false,  // Disabled on cloud
+                        enable_rewrite: enableRewrite.checked
+                    })
+                });
+
+                const data = await response.json();
+                const elapsed = Date.now() - startTime;
+                
+                if (data.success) {
+                    displayResults(data, elapsed);
+                } else {
+                    showError(data.error || 'Search failed');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            } finally {
+                loading.classList.add('hidden');
+            }
+        }
+
+        function displayResults(data, clientElapsedMs) {
+            // Hide other sections
+            hideAllSections();
+            
+            // Show search info
+            let queryVariantsHtml = '';
+            if (data.query_variants && data.query_variants.length > 1) {
+                const variants = data.query_variants.slice(1);
+                if (variants.length > 0) {
+                    queryVariantsHtml = `
+                        <div class="mt-2 text-sm text-gray-600">
+                            <span class="font-medium">Query variants:</span> ${variants.map(v => `"${escapeHtml(v)}"`).join(', ')}
+                        </div>
+                    `;
+                }
+            }
+            
+            searchInfo.innerHTML = `
+                <div class="flex flex-wrap justify-between items-center">
+                    <div>
+                        <span class="font-medium">Query:</span> "${escapeHtml(data.query)}"
+                        ${data.intent ? `<span class="ml-4 text-sm text-blue-600">Intent: ${escapeHtml(data.intent)}</span>` : ''}
+                    </div>
+                    <div class="text-sm text-gray-600">
+                        ${data.total_results} results
+                        ${data.processing_time_ms ? ` • Server: ${data.processing_time_ms}ms` : ''}
+                        • Total: ${clientElapsedMs}ms
+                        ${data.filter_expr ? ` • Filters: ${escapeHtml(data.filter_expr)}` : ''}
+                    </div>
+                </div>
+                ${queryVariantsHtml}
+            `;
+
+            // Show results
+            resultsGrid.innerHTML = data.results.map(paper => createPaperCard(paper)).join('');
+            resultsContainer.classList.remove('hidden');
+        }
+
+        function createPaperCard(paper) {
+            const authors = Array.isArray(paper.authors) ? paper.authors : [];
+            const categories = Array.isArray(paper.categories) ? paper.categories : [];
+            
+            return `
+                <div class="paper-card bg-white rounded-lg shadow-md p-6">
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex-1">
+                            <h3 class="text-lg font-semibold text-gray-900 mb-2 leading-tight">
+                                ${escapeHtml(paper.title)}
+                            </h3>
+                            <div class="flex flex-wrap items-center gap-2 mb-2">
+                                ${authors.slice(0, 3).map(author => 
+                                    `<span class="author-tag px-2 py-1 rounded-full text-xs font-medium">
+                                        ${escapeHtml(author)}
+                                    </span>`
+                                ).join('')}
+                                ${authors.length > 3 ? `<span class="text-xs text-gray-500">+${authors.length - 3} more</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="flex flex-col items-end space-y-1 ml-4">
+                            <div class="score-badge text-white px-2 py-1 rounded-full text-xs font-medium">
+                                Score: ${paper.score.toFixed(3)}
+                            </div>
+                            ${paper.year ? `<span class="text-xs text-gray-500">${paper.year}</span>` : ''}
+                            ${paper.citation_count > 0 ? `<span class="text-xs text-gray-500">${paper.citation_count} citations</span>` : ''}
+                        </div>
+                    </div>
+                    
+                    <p class="text-gray-700 text-sm leading-relaxed mb-3">
+                        ${escapeHtml(paper.abstract || '').substring(0, 300)}${(paper.abstract || '').length > 300 ? '...' : ''}
+                    </p>
+                    
+                    <div class="flex flex-wrap items-center justify-between">
+                        <div class="flex flex-wrap gap-1 mb-2">
+                            ${categories.slice(0, 4).map(category => 
+                                `<span class="tag px-2 py-1 rounded-full text-xs font-medium">
+                                    ${escapeHtml(category)}
+                                </span>`
+                            ).join('')}
+                            ${categories.length > 4 ? `<span class="text-xs text-gray-500">+${categories.length - 4} more</span>` : ''}
+                        </div>
+                        
+                        ${paper.dense_score || paper.sparse_score ? `
+                        <div class="text-xs text-gray-500">
+                            ${paper.dense_score ? `Dense: ${paper.dense_score.toFixed(3)}` : ''}
+                            ${paper.dense_score && paper.sparse_score ? ' • ' : ''}
+                            ${paper.sparse_score ? `Sparse: ${paper.sparse_score.toFixed(3)}` : ''}
+                        </div>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="mt-2 text-xs text-gray-400">
+                        arXiv ID: ${escapeHtml(paper.id || 'N/A')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function showError(message) {
+            hideAllSections();
+            errorMessage.textContent = message;
+            errorContainer.classList.remove('hidden');
+        }
+
+        function hideAllSections() {
+            resultsContainer.classList.add('hidden');
+            errorContainer.classList.add('hidden');
+            welcomeSection.classList.add('hidden');
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Event listeners
+        searchBtn.addEventListener('click', performSearch);
+        
+        searchQuery.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+
+        // Example query buttons
+        exampleQueries.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const queryText = btn.querySelector('p').textContent.replace(/"/g, '');
+                searchQuery.value = queryText;
+                performSearch();
+            });
+        });
+
+        // Auto-focus search input
+        searchQuery.focus();
+    </script>
+</body>
+</html>

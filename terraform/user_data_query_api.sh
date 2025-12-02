@@ -68,6 +68,18 @@ EOF
 pip install --upgrade pip
 pip install -r requirements.txt
 
+# Set HuggingFace token if provided
+HF_TOKEN="${HF_TOKEN}"
+if [ -n "$HF_TOKEN" ]; then
+    echo "Setting HuggingFace token..."
+    export HUGGING_FACE_HUB_TOKEN="$HF_TOKEN"
+    
+    # Also login via huggingface-cli for persistent authentication
+    pip install -q huggingface_hub
+    python3 -c "from huggingface_hub import login; login('$HF_TOKEN')"
+    echo "✓ HuggingFace authentication configured"
+fi
+
 # Download models (pre-cache to avoid first-request delay)
 echo "Pre-downloading models..."
 python3 -c "
@@ -82,12 +94,19 @@ model = AutoAdapterModel.from_pretrained('allenai/specter2_base')
 model.load_adapter('allenai/specter2', source='hf')
 model.load_adapter('allenai/specter2_adhoc_query', source='hf')
 
-# SPLADE
+# SPLADE - use full v3 model if token is available, otherwise distilbert
 print('Downloading SPLADE...')
-AutoTokenizer.from_pretrained('naver/splade-v3-distilbert')
-AutoModel.from_pretrained('naver/splade-v3-distilbert')
+try:
+    AutoTokenizer.from_pretrained('naver/splade-v3')
+    AutoModel.from_pretrained('naver/splade-v3')
+    print('✓ Using SPLADE v3 (full model)')
+except Exception as e:
+    print(f'Could not download SPLADE v3, falling back to distilbert: {e}')
+    AutoTokenizer.from_pretrained('naver/splade-v3-distilbert')
+    AutoModel.from_pretrained('naver/splade-v3-distilbert')
+    print('✓ Using SPLADE v3 distilbert')
 
-print('✓ Models downloaded')
+print('Models downloaded')
 "
 
 # Create systemd service for API
@@ -107,6 +126,7 @@ Environment="MILVUS_HOST=${MILVUS_HOST}"
 Environment="MILVUS_PORT=${MILVUS_PORT}"
 Environment="BEDROCK_REGION=${BEDROCK_REGION}"
 Environment="BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}"
+Environment="HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}"
 ExecStart=/opt/arxplorer/venv/bin/python scripts/api_server.py --host 0.0.0.0 --port ${QUERY_API_PORT} --workers ${QUERY_API_WORKERS}
 Restart=always
 RestartSec=10
@@ -118,7 +138,7 @@ SYSTEMD_EOF
 # Reload systemd
 systemctl daemon-reload
 
-echo "✓ Systemd service file created"
+echo "Systemd service file created"
 cat /etc/systemd/system/arxplorer-api.service
 
 # Create config.yaml with correct Milvus host
@@ -128,7 +148,7 @@ cat > /opt/arxplorer/config.yaml <<CONFIG_EOF
 
 encoder:
   dense_model: sentence-transformers/allenai-specter
-  sparse_model: naver/splade-v3-distilbert
+  sparse_model: naver/splade-v3
   max_length: 512
   normalize_dense: true
   device: null
@@ -193,7 +213,7 @@ query_rewriting:
   use_bedrock: true
   bedrock_model_id: ${BEDROCK_MODEL_ID}
   bedrock_region: ${BEDROCK_REGION}
-  bedrock_max_tokens: 512
+  bedrock_max_tokens: 1024
 
 reranker:
   enabled: false
@@ -229,18 +249,18 @@ milvus:
   batch_size: 1000
 CONFIG_EOF
 
-echo "✓ config.yaml created with Milvus host: ${MILVUS_HOST}"
+echo "config.yaml created with Milvus host: ${MILVUS_HOST}"
 cat /opt/arxplorer/config.yaml | head -20
 
 # Set permissions
 chown -R ubuntu:ubuntu /opt/arxplorer
 
-# Install CloudWatch agent (optional)
+# Install CloudWatch agent
 wget https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
 dpkg -i -E ./amazon-cloudwatch-agent.deb
 
 echo ""
-echo "✓ Query API infrastructure setup complete!"
+echo "Query API infrastructure setup complete!"
 echo ""
 echo "======================================"
 echo "NEXT STEP: Deploy application code"
