@@ -1,0 +1,18 @@
+{
+  "cpu": "2048",
+  "memory": "8192",
+  "containerOverrides": [
+    {
+      "name": "offline-worker",
+      "environment": [
+        {"name": "AWS_REGION",       "value": "ca-central-1"},
+        {"name": "RAW_BUCKET",       "value": "arxplorer-jjb08-prod-raw-data"},
+        {"name": "PROCESSED_BUCKET", "value": "arxplorer-jjb08-prod-processed"},
+        {"name": "METADATA_BUCKET",  "value": "arxplorer-jjb08-prod-metadata"},
+        {"name": "EMBEDDINGS_BUCKET","value": "arxplorer-jjb08-prod-embeddings"},
+        {"name": "MILVUS_HOST",      "value": "10.0.4.123"},
+        {"name": "MILVUS_PORT",      "value": "19530"}
+      ]
+    }
+  ]
+}

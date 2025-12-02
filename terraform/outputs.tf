@@ -1,91 +1,86 @@
 # Outputs for ArXplorer infrastructure
 
-output "vllm_public_ip" {
-  description = "Public IP address of vLLM instance"
-  value       = var.enable_vllm ? (var.use_elastic_ip ? aws_eip.vllm[0].public_ip : aws_instance.vllm[0].public_ip) : "vLLM disabled - set enable_vllm=true after GPU quota approval"
+output "search_api_alb_dns" {
+  description = "DNS name for the Search API ALB"
+  value       = module.app.alb_dns
 }
 
-output "vllm_private_ip" {
-  description = "Private IP address of vLLM instance"
-  value       = var.enable_vllm ? aws_instance.vllm[0].private_ip : "vLLM disabled"
-}
-
-output "vllm_endpoint" {
-  description = "vLLM API endpoint URL"
-  value       = var.enable_vllm ? "http://${var.use_elastic_ip ? aws_eip.vllm[0].public_ip : aws_instance.vllm[0].public_ip}:${var.vllm_port}/v1" : "vLLM disabled - set enable_vllm=true after GPU quota approval"
-}
-
-output "milvus_public_ip" {
-  description = "Public IP address of Milvus instance"
-  value       = var.use_elastic_ip ? aws_eip.milvus[0].public_ip : aws_instance.milvus.public_ip
-}
-
-output "milvus_private_ip" {
-  description = "Private IP address of Milvus instance"
-  value       = aws_instance.milvus.private_ip
-}
-
-output "milvus_endpoint" {
-  description = "Milvus gRPC endpoint"
-  value       = "${var.use_elastic_ip ? aws_eip.milvus[0].public_ip : aws_instance.milvus.public_ip}:19530"
+output "search_api_asg_name" {
+  description = "Name of the Search API autoscaling group"
+  value       = module.app.asg_name
 }
 
 output "s3_backup_bucket" {
   description = "S3 bucket name for Milvus backups"
-  value       = aws_s3_bucket.backups.id
+  value       = module.data.s3_backup_bucket
 }
 
 output "s3_backup_bucket_arn" {
   description = "ARN of S3 backup bucket"
-  value       = aws_s3_bucket.backups.arn
+  value       = module.data.s3_backup_bucket_arn
 }
 
 output "milvus_ebs_volume_id" {
   description = "EBS volume ID for Milvus data"
-  value       = aws_ebs_volume.milvus_data.id
-}
-
-output "ssh_command_vllm" {
-  description = "SSH command to connect to vLLM instance"
-  value       = var.enable_vllm ? "ssh -i ~/.ssh/${var.key_name}.pem ubuntu@${var.use_elastic_ip ? aws_eip.vllm[0].public_ip : aws_instance.vllm[0].public_ip}" : "vLLM disabled"
+  value       = module.data.milvus_ebs_volume_id
 }
 
 output "ssh_command_milvus" {
   description = "SSH command to connect to Milvus instance"
-  value       = "ssh -i ~/.ssh/${var.key_name}.pem ubuntu@${var.use_elastic_ip ? aws_eip.milvus[0].public_ip : aws_instance.milvus.public_ip}"
+  value       = "ssh -i ~/.ssh/${var.key_name}.pem ubuntu@${var.use_elastic_ip ? module.data.milvus_public_ip : module.data.milvus_private_ip}"
 }
 
 output "config_yaml_snippet" {
   description = "Configuration snippet for config.yaml"
-  value       = var.enable_vllm ? join("", [
+  value       = join("", [
     "# Update your config.yaml with these values:\n\n",
     "query_rewriting:\n",
     "  enabled: true\n",
-    "  use_vllm: true\n",
-    "  vllm_endpoint: http://", var.use_elastic_ip ? aws_eip.vllm[0].public_ip : aws_instance.vllm[0].public_ip, ":", var.vllm_port, "/v1\n\n",
+    "  provider: bedrock\n",
+    "  model: <your-bedrock-model-id>\n",
+    "  region: ", var.aws_region, "\n\n",
     "milvus:\n",
-    "  host: ", var.use_elastic_ip ? aws_eip.milvus[0].public_ip : aws_instance.milvus.public_ip, "\n",
-    "  port: 19530\n"
-  ]) : join("", [
-    "# Update your config.yaml with these values:\n\n",
-    "query_rewriting:\n",
-    "  enabled: false  # vLLM disabled - enable after GPU quota approval\n\n",
-    "milvus:\n",
-    "  host: ", var.use_elastic_ip ? aws_eip.milvus[0].public_ip : aws_instance.milvus.public_ip, "\n",
+    "  host: ", var.use_elastic_ip ? module.data.milvus_public_ip : module.data.milvus_private_ip, "\n",
     "  port: 19530\n"
   ])
 }
 
 output "health_check_commands" {
   description = "Commands to verify services are running"
-  value       = var.enable_vllm ? join("", [
-    "# Check vLLM health:\n",
-    "curl http://", var.use_elastic_ip ? aws_eip.vllm[0].public_ip : aws_instance.vllm[0].public_ip, ":", var.vllm_port, "/health\n\n",
-    "# Check Milvus (from local machine with pymilvus):\n",
-    "python -c \"from pymilvus import connections; connections.connect(host='", var.use_elastic_ip ? aws_eip.milvus[0].public_ip : aws_instance.milvus.public_ip, "', port='19530'); print('Milvus OK')\"\n"
-  ]) : join("", [
-    "# vLLM disabled - only Milvus available\n\n",
-    "# Check Milvus (from local machine with pymilvus):\n",
-    "python -c \"from pymilvus import connections; connections.connect(host='", var.use_elastic_ip ? aws_eip.milvus[0].public_ip : aws_instance.milvus.public_ip, "', port='19530'); print('Milvus OK')\"\n"
+  value       = join("", [
+    "# Check Search API via ALB:\n",
+    "curl http://", module.app.alb_dns, "\n\n",
+    "# Check Milvus (from a host that can reach it):\n",
+    "python -c \"from pymilvus import connections; connections.connect(host='", var.use_elastic_ip ? module.data.milvus_public_ip : module.data.milvus_private_ip, "', port='19530'); print('Milvus OK')\"\n"
   ])
+}
+
+output "milvus_private_ip" {
+  description = "Private IP address of Milvus instance"
+  value       = module.data.milvus_private_ip
+}
+
+output "milvus_public_ip" {
+  description = "Public IP address of Milvus instance (if EIP enabled)"
+  value       = module.data.milvus_public_ip
+}
+
+output "milvus_endpoint" {
+  description = "Milvus gRPC endpoint"
+  value       = module.data.milvus_endpoint
+}
+
+output "offline_cluster_name" {
+  description = "ECS cluster for offline pipeline workers"
+  value       = module.offline.cluster_name
+}
+
+output "offline_task_definition" {
+  description = "ECS task definition ARN for offline workers"
+  value       = module.offline.task_definition_arn
+}
+
+output "offline_service_name" {
+  description = "ECS service name for offline workers (desired_count can be 0)"
+  value       = module.offline.service_name
 }
