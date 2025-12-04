@@ -1,0 +1,25 @@
+data:
+  id_key: paper_id
+  jsonl_file: data/custom.jsonl
+  text_key: body
+encoder:
+  dense_model: my-dense-model
+  sparse_model: my-sparse-model
+  use_specter2: true
+index:
+  batch_size: 32
+  checkpoint_enabled: false
+milvus:
+  collection_name: custom_collection
+  host: milvus-host
+  port: 20000
+query_rewriting:
+  enabled: true
+  model: my-llm
+  num_rewrites: 3
+reranker:
+  enabled: false
+  model: my-reranker-model
+search:
+  retrieval_k: 200
+  top_k: 25

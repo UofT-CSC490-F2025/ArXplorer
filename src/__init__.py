@@ -1,4 +1,5 @@
-"""
-ArXplorer Source Package
-Core components for academic paper discovery and semantic search
-"""
+"""Src package for retrieval system."""
+
+from . import config, data, retrieval
+
+__all__ = ["config", "data", "retrieval"]

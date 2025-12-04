@@ -1,0 +1,104 @@
+# ArXplorer Configuration for AWS Query API Deployment
+# Minimal config with only required fields for API operation
+
+encoder:
+  dense_model: sentence-transformers/allenai-specter
+  sparse_model: naver/splade-v3-distilbert
+  max_length: 512
+  normalize_dense: true
+  device: null
+  use_specter2: true
+  specter2_base_adapter: allenai/specter2
+  specter2_query_adapter: allenai/specter2_adhoc_query
+
+index:
+  batch_size: 16
+  chunk_size: 10000
+  sparse_encoder_batch_size: 4
+
+search:
+  top_k: 10
+  rrf_k: 60
+  retrieval_k: 200
+
+intent_boosting:
+  enabled: true
+  citation_weights:
+    topical: 0.1
+    comparison: 0.1
+    method_lookup: 0.1
+    default: 0.1
+    sota: 0.2
+    foundational: 0.3
+    specific_paper: 0.15
+  date_weights:
+    topical: 0.0
+    comparison: 0.0
+    method_lookup: 0.0
+    default: 0.0
+    sota: 0.1
+    foundational: 0.1
+    specific_paper: 0.0
+  min_year: 1990
+
+title_author_matching:
+  enabled: true
+  title_threshold: 0.5
+  author_threshold: 0.7
+  title_boost_weight: 1.0
+  author_boost_weight: 1.0
+
+citation:
+  enabled: true
+  data_file: data/citations.json
+  score_formula: log
+  normalize: true
+  missing_default: 0.0
+
+query_rewriting:
+  enabled: true
+  model: Qwen/Qwen3-4B-AWQ
+  max_length: 128
+  temperature: 0.3
+  num_rewrites: 1
+  device: null
+  use_vllm: false
+  vllm_endpoint: http://localhost:8000/v1
+  vllm_timeout: 30
+  use_bedrock: true
+  bedrock_model_id: mistral.mistral-7b-instruct-v0:2
+  bedrock_region: ca-central-1
+  bedrock_max_tokens: 512
+
+reranker:
+  enabled: false
+  type: jina
+  model: jinaai/jina-reranker-v3
+  rerank_top_k: 50
+  max_length: 512
+  batch_size: 50
+  pre_rerank_weight: 0.7
+  rerank_weight: 0.3
+  instruction: null
+
+data:
+  jsonl_file: data/arxiv_1k.jsonl
+  text_key: abstract
+  id_key: id
+  title_key: title
+  use_metadata: true
+  categories_key: categories
+  authors_key: authors
+  year_key: published_date
+  metadata_template: 'Title: {title}\n\nAuthors: {authors}\n\nYear: {year}\n\nCategories: {categories}\n\nAbstract: {abstract}'
+
+milvus:
+  host: localhost
+  port: 19530
+  collection_name: arxplorer_papers
+  dense_index_type: IVF_FLAT
+  dense_nlist: 1024
+  dense_nprobe: 64
+  sparse_index_type: SPARSE_INVERTED_INDEX
+  connection_timeout: 30
+  batch_size: 1000
