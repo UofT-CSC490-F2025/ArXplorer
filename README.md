@@ -133,7 +133,7 @@ python scripts/query.py
 
 ## 🏗️ How It Works
 The retrieval pipeline for a sample query is as follows:
-![ArXplorer Query Pipeline](retrieval_pipeline.png)
+![ArXplorer Query Pipeline](images\retrieval_pipeline.png)
 
 ```
 User Query: "original unet paper"
